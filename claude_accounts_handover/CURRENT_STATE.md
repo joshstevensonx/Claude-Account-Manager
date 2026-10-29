@@ -2,7 +2,7 @@
 
 ## Summary
 
-Version 3 (Workspace: multiple sessions in the GUI) is complete in the repo; version 2 is complete and has been written to the owner's Mac at `~/Desktop/DEV/claude_system/`. It hasn't been run on macOS yet: no feedback from the owner after installation.
+Version 4 ("Claude Hub" redesign from the owner's spec and mockup) and version 3 (Chat panes) are complete in the repo; version 2 is complete and has been written to the owner's Mac at `~/Desktop/DEV/claude_system/`. It hasn't been run on macOS yet: no feedback from the owner after installation.
 
 ## Evidence levels
 
@@ -27,7 +27,11 @@ Version 3 (Workspace: multiple sessions in the GUI) is complete in the repo; ver
 
 | Version 3: Workspace tab — several Claude Code sessions side by side in the GUI, each on any account, with a message box per pane (`claude -p --resume`), stop, per-pane permission mode, enlarge, continue in Terminal; open from Sessions, Tasks or an account menu | **Real-tested** in the sandbox: two panes ran in parallel with separate session ids; a follow-up in one pane recalled its own earlier message; transcripts load through `/api/transcript`. UI checked in Chromium (light, dark, 390 px): no JS errors, no horizontal scroll |
 
+| Version 4: Claude Hub UI (sidebar; Overview, Accounts, Sessions, GUI Windows, Chat, Workspaces, Tasks, Usage, Activity, Settings; New session modal with launch summary; Open multiple; light/dark/system theme). Backend: workspaces, activity log with retention, diagnostics, archive/restore, focus by pid, launch validation and failure reporting, native folder picker, per-account default client | Sandbox-tested in dry-run with sample transcripts, plan usage and fake Desktop/Chrome processes: every page and modal driven in Chromium (dark, light, 390 px), no JS errors, no horizontal scroll. Launch failure path tested without dry-run (osascript missing → error + Activity entry). Not run on macOS |
+
 ## Not verified (needs the Mac)
+
+- Focus (`System Events` by pid) and the native folder picker (`choose folder`) — both may trigger a macOS Automation permission prompt the first time.
 
 - Desktop app isolation through `--user-data-dir`, and whether sign-ins go to the right copy (A-02, A-07).
 - Terminal and iTerm AppleScript launch, the macOS Automation permission prompt, and Gatekeeper on the `.command` file.
