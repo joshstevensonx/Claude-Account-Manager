@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Accounts</title>
+<style>
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --panel-2:#f0eee8; --ink:#1d1c1a; --muted:#6f6c66; --line:#e3e0d8;
+  --accent:#c96442; --accent-ink:#fff; --ok:#3f8f5a; --warn:#b7791f; --danger:#b4413a; --info:#3b6fb6;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1a1917; --panel:#242320; --panel-2:#2d2b28; --ink:#ecebe7; --muted:#9c9890; --line:#38362f;
+  --accent:#d97757; --ok:#5fb37a; --warn:#d9a441; --danger:#e0675f; --info:#7aa7e6; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 24px 64px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:700}
+h1{font-size:20px;margin:0;letter-spacing:-.01em}
+h2.sec{font-size:15px;margin:26px 0 10px}
+.sub{color:var(--muted);font-size:13px}
+.spacer{flex:1}
+.btn{border:1px solid var(--line);background:var(--panel);padding:8px 13px;border-radius:9px;display:inline-flex;align-items:center;gap:7px;transition:.15s;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.ghost:hover{background:var(--panel-2)}
+.btn.sm{padding:5px 9px;font-size:12.5px;border-radius:7px}
+.btn:disabled{opacity:.5;cursor:default}
+/* tabs */
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
+nav.tabs button{border:0;background:none;padding:10px 14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;gap:7px;align-items:center;white-space:nowrap}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+nav.tabs .count{background:var(--panel-2);border-radius:999px;padding:0 7px;font-size:11.5px;color:var(--muted);font-weight:600}
+nav.tabs .count.hot{background:var(--accent);color:#fff}
+section.view{display:none}
+section.view.on{display:block}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.search{flex:1;min-width:200px;position:relative}
+.search input[type=text]{width:100%;padding:9px 12px 9px 34px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;outline:none}
+.search input[type=text]:focus{border-color:var(--accent)}
+.search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.5}
+.kbd{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--muted)}
+.stats{display:flex;gap:8px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.chip b{color:var(--ink)}
+button.chip.on{border-color:var(--ink);color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative;min-width:0}
+.card.live{border-color:color-mix(in srgb,var(--c) 55%,var(--line))}
+.card .bar{height:4px;background:var(--c);border-radius:13px 13px 0 0}
+.card .top{display:flex;gap:12px;padding:16px 16px 8px;align-items:flex-start}
+.avatar{width:40px;height:40px;border-radius:11px;background:var(--c);color:#fff;font-weight:650;display:grid;place-items:center;font-size:15px;flex:none}
+.avatar.sm{width:22px;height:22px;border-radius:6px;font-size:10px}
+.title{flex:1;min-width:0}
+.title .name{font-weight:620;font-size:15.5px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.title .note{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct .em{color:var(--ink)}
+.tag{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:5px;background:var(--panel-2);color:var(--muted);font-weight:600}
+.tag.best{background:color-mix(in srgb,var(--ok) 18%,var(--panel));color:var(--ok)}
+.num{font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
+.minis{padding:0 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini{font-size:11.5px;color:var(--muted)}
+.mini .row{display:flex;justify-content:space-between}
+.mini b{color:var(--ink);font-weight:600}
+.meter{height:6px;border-radius:99px;background:var(--panel-2);overflow:hidden;margin-top:3px}
+.meter i{display:block;height:100%;border-radius:99px;background:var(--ok)}
+.meter i.w{background:var(--warn)} .meter i.d{background:var(--danger)}
+.live-row{padding:0 16px 8px;display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-size:11.5px;border-radius:999px;padding:2px 8px;display:inline-flex;gap:5px;align-items:center;background:var(--panel-2);color:var(--muted);white-space:nowrap;border:0}
+.pill .dot{width:6px;height:6px}
+.pill.working{color:var(--info);background:color-mix(in srgb,var(--info) 13%,var(--panel))}
+.pill.needs_you{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,var(--panel))}
+.pill.waiting{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,var(--panel))}
+.pill.running{color:var(--info);background:color-mix(in srgb,var(--info) 13%,var(--panel))}
+.pill.done{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,var(--panel))}
+.pill.error,.pill.stopped,.pill.interrupted{color:var(--danger);background:color-mix(in srgb,var(--danger) 13%,var(--panel))}
+.pill.working .dot,.pill.running .dot{background:var(--info);animation:pulse 1.2s infinite}
+.pill.needs_you .dot,.pill.done .dot{background:var(--ok)}
+.pill.waiting .dot{background:var(--warn);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.launch{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:6px 16px 14px}
+.tile{border:1px solid var(--line);background:var(--panel-2);border-radius:11px;padding:11px 8px 9px;display:flex;flex-direction:column;align-items:center;gap:5px;transition:.15s;position:relative}
+.tile:hover{border-color:var(--c);background:color-mix(in srgb,var(--c) 9%,var(--panel-2))}
+.tile:active{transform:scale(.98)}
+.tile svg{opacity:.8}
+.tile .lbl{font-size:12.5px;font-weight:560}
+.tile .st{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+.tile .x{position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:6px;border:0;background:transparent;display:none;place-items:center;color:var(--muted)}
+.tile.on .x{display:grid}
+.tile .x:hover{background:var(--danger);color:#fff}
+.foot{border-top:1px solid var(--line);padding:9px 14px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.foot .grow{flex:1}
+.menu{position:absolute;right:12px;top:52px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:5px;z-index:5;min-width:200px;display:none}
+.menu.open{display:block}
+.menu button{display:flex;width:100%;text-align:left;border:0;background:none;padding:7px 10px;border-radius:7px;gap:8px;align-items:center}
+.menu button:hover{background:var(--panel-2)}
+.menu .danger{color:var(--danger)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.add-card{border:1.5px dashed var(--line);border-radius:14px;display:grid;place-items:center;min-height:210px;color:var(--muted);background:transparent;transition:.15s}
+.add-card:hover{border-color:var(--accent);color:var(--accent)}
+.add-card span{display:block;font-size:28px;line-height:1;margin-bottom:6px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:18px}
+.panel h3{margin:0 0 6px;font-size:14px}
+.panel p{margin:0 0 10px;color:var(--muted);font-size:13px}
+code,.code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+.code{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;display:flex;align-items:center;gap:10px;overflow:auto}
+.code span{flex:1;white-space:nowrap}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:6px}
+.step{display:flex;gap:10px}
+.step b{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;display:grid;place-items:center;flex:none}
+.step div{font-size:13px;color:var(--muted)}
+.step strong{color:var(--ink);display:block}
+.banner{background:color-mix(in srgb,var(--warn) 14%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));padding:9px 13px;border-radius:10px;margin-bottom:14px;font-size:13px}
+.banner.good{background:color-mix(in srgb,var(--ok) 12%,var(--panel));border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+.offline{display:none}
+body.down .offline{display:block}
+.empty{text-align:center;color:var(--muted);padding:40px 16px;border:1.5px dashed var(--line);border-radius:14px}
+/* sessions */
+.list{display:flex;flex-direction:column;gap:8px}
+.srow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;cursor:pointer;transition:.12s;text-align:left;width:100%}
+.srow:hover{border-color:var(--muted)}
+.srow.sel{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.srow .main{min-width:0}
+.srow .t1{font-weight:590;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .t2{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .meta{font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}
+.acc-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.acc-badge i{width:8px;height:8px;border-radius:3px;background:var(--c)}
+/* drawer */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(620px,100vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:-10px 0 40px rgba(0,0,0,.15);z-index:15;transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer .dh{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:flex-start}
+.drawer .dh .grow{flex:1;min-width:0}
+.drawer .dh h3{margin:0;font-size:15px;line-height:1.3}
+.drawer .dacts{padding:10px 18px;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.drawer .feed{flex:1;overflow:auto;padding:14px 18px 40px;display:flex;flex-direction:column;gap:10px}
+.msg{font-size:13.5px;line-height:1.5}
+.msg.user{align-self:flex-end;background:color-mix(in srgb,var(--accent) 12%,var(--panel-2));border-radius:12px 12px 4px 12px;padding:9px 12px;max-width:88%;white-space:pre-wrap}
+.msg.assistant{white-space:pre-wrap}
+.msg.tool,.msg.result,.msg.system{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);background:var(--panel-2);border-radius:8px;padding:6px 9px;white-space:pre-wrap;word-break:break-word}
+.msg.tool b{color:var(--ink)}
+.msg.result.err,.msg.error{color:var(--danger)}
+.msg.error{font-size:12.5px;background:color-mix(in srgb,var(--danger) 10%,var(--panel));border-radius:8px;padding:7px 10px;white-space:pre-wrap}
+.msg .ts{font-size:10.5px;color:var(--muted);display:block;margin-top:2px}
+/* usage */
+.ucard{padding:16px}
+.ucard .uh{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.limit{margin-bottom:12px}
+.limit .row{display:flex;justify-content:space-between;font-size:12.5px;gap:8px}
+.limit .row b{font-variant-numeric:tabular-nums}
+.limit .meter{height:8px}
+.fc{font-size:11.5px;color:var(--muted);margin-top:3px}
+.ttable{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.ttable th{text-align:right;color:var(--muted);font-weight:500;padding:4px 0}
+.ttable th:first-child,.ttable td:first-child{text-align:left}
+.ttable td{text-align:right;padding:5px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:var(--panel);padding:6px 11px;font-size:12.5px;color:var(--muted)}
+.seg button.on{background:var(--panel-2);color:var(--ink);font-weight:600}
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 9px;border-radius:7px;z-index:40;display:none;white-space:nowrap}
+/* tasks */
+.tasks{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:16px;align-items:start}
+.newtask textarea{width:100%;min-height:96px;resize:vertical;padding:10px 11px;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font:inherit;outline:none}
+.newtask textarea:focus{border-color:var(--accent)}
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.modes button{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:7px 6px;font-size:12px;text-align:center}
+.modes button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel-2))}
+.modes small{display:block;color:var(--muted);font-size:10.5px}
+.runview{min-height:420px;display:flex;flex-direction:column}
+.runview .feed{display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow:auto;padding-right:4px}
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(20,18,15,.42);display:none;align-items:center;justify-content:center;z-index:20;padding:16px;backdrop-filter:blur(2px)}
+.scrim.open{display:flex}
+.modal{background:var(--panel);border-radius:16px;width:100%;max-width:460px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3);border:1px solid var(--line);max-height:92vh;overflow:auto}
+.modal h2{margin:0 0 4px;font-size:17px}
+.modal .hint{color:var(--muted);font-size:13px;margin:0 0 16px}
+label{display:block;font-size:12.5px;font-weight:560;margin:12px 0 5px}
+input[type=text],select{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font:inherit;outline:none}
+input[type=text]:focus,select:focus{border-color:var(--accent)}
+.check{display:flex;gap:9px;align-items:center;font-weight:400;margin:8px 0}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:26px;height:26px;border-radius:8px;border:2px solid transparent;outline:none}
+.sw.sel{border-color:var(--ink)}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:9px 15px;border-radius:10px;font-size:13px;opacity:0;transition:.25s;z-index:30;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.bell{position:relative}
+.bell .n{position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:99px;font-size:10px;min-width:16px;height:16px;display:none;place-items:center;padding:0 4px}
+.bell .n.on{display:grid}
+.notes{position:absolute;right:0;top:44px;width:min(360px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);z-index:12;display:none;max-height:60vh;overflow:auto}
+.notes.open{display:block}
+.notes .it{padding:10px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
+.notes .it b{display:block;font-size:13px}
+@media (max-width:860px){.tasks{grid-template-columns:1fr}}
+@media (max-width:560px){.wrap{padding:16px 16px 48px}.stats{display:none}.srow{grid-template-columns:1fr}.srow .meta{text-align:left}.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">✳</div>
+    <div>
+      <h1>Claude Accounts</h1>
+      <div class="sub">Run, watch and balance every Claude account from one place.</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="bell">
+      <button class="btn ghost" id="bellBtn" title="Notifications">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+      </button>
+      <span class="n" id="bellN"></span>
+      <div class="notes" id="notes"></div>
+    </div>
+    <button class="btn ghost" id="settingsBtn" title="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      <span class="hide-sm">Settings</span>
+    </button>
+    <button class="btn primary" id="addBtn">＋ <span class="hide-sm">New account</span></button>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="accounts" class="on">Accounts</button>
+    <button data-tab="sessions">Sessions <span class="count" id="cSessions">0</span></button>
+    <button data-tab="usage">Usage</button>
+    <button data-tab="tasks">Tasks <span class="count" id="cTasks">0</span></button>
+  </nav>
+
+  <div class="banner offline">The manager isn't responding. Start it again with <b>Claude Manager.command</b>, then reload this page.</div>
+  <div class="banner" id="dryBanner" style="display:none">Dry-run mode: launches are logged, not executed.</div>
+
+  <!-- ACCOUNTS -->
+  <section class="view on" id="v-accounts">
+    <div class="toolbar">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="text" placeholder="Filter accounts…   ( / )" autocomplete="off">
+      </div>
+      <div class="stats" id="stats"></div>
+      <button class="btn" id="allBtn" title="Open the desktop app for every account">Open all desktops</button>
+    </div>
+    <div class="banner good" id="bestBanner" style="display:none"></div>
+    <div class="grid" id="grid"></div>
+    <div class="panel" id="guide">
+      <h3>How it works</h3>
+      <div class="steps">
+        <div class="step"><b>1</b><div><strong>Create an account</strong>Each one gets its own private data folders.</div></div>
+        <div class="step"><b>2</b><div><strong>Launch &amp; sign in once</strong>Sign in to a new desktop copy right after opening it — the most recently opened copy receives the sign-in link.</div></div>
+        <div class="step"><b>3</b><div><strong>Watch &amp; balance</strong>Sessions shows what every account is doing; Usage shows who has headroom.</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Terminal shortcuts</h3>
+      <p>Add this line to <code>~/.zshrc</code> to get a <code>claude-&lt;name&gt;</code> command for every account.</p>
+      <div class="code"><span id="aliasLine">source ~/.claude-system/aliases.zsh</span><button class="btn sm" data-copy="aliasLine">Copy</button></div>
+    </div>
+  </section>
+
+  <!-- SESSIONS -->
+  <section class="view" id="v-sessions">
+    <div class="toolbar">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="sq" type="text" placeholder="Search sessions, projects, prompts…" autocomplete="off">
+      </div>
+      <select id="sAcct" style="width:auto"><option value="">All accounts</option></select>
+    </div>
+    <div class="toolbar" id="sFilters"></div>
+    <div class="list" id="slist"></div>
+  </section>
+
+  <!-- USAGE -->
+  <section class="view" id="v-usage">
+    <div class="banner good" id="uBest" style="display:none"></div>
+    <div class="grid" id="ugrid"></div>
+    <div class="panel">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h3 style="margin:0;flex:1">Last 14 days · Claude Code</h3>
+        <div class="seg" id="chartMode"><button data-m="tokens" class="on">Tokens</button><button data-m="cost">API-equivalent $</button></div>
+      </div>
+      <div id="chart" style="margin-top:12px"></div>
+      <div class="legend" id="chartLegend"></div>
+    </div>
+    <p class="sub" style="margin-top:12px">Plan limits come from the Claude desktop app's own accounting (<code>plan-usage-history.json</code> in each account's desktop folder) and refresh about every 5 minutes while that account's desktop app is open. Token counts come from Claude Code transcripts; dollar figures are what the same tokens would cost at API list prices — a way to compare accounts, not a bill.</p>
+  </section>
+
+  <!-- TASKS -->
+  <section class="view" id="v-tasks">
+    <div class="tasks">
+      <div>
+        <form class="panel newtask" id="taskForm" style="margin-top:0">
+          <h3>Run a task in the background</h3>
+          <p>Claude Code runs headless under the account you pick. Output streams here; continue it in Terminal any time.</p>
+          <label for="tAcct">Account</label>
+          <select id="tAcct"></select>
+          <label for="tDir">Project folder</label>
+          <input type="text" id="tDir" list="projList" placeholder="~/Desktop/DEV/project">
+          <datalist id="projList"></datalist>
+          <label>Permissions</label>
+          <div class="modes" id="tModes">
+            <button type="button" data-m="plan" class="on">Plan<small>read-only</small></button>
+            <button type="button" data-m="default">Ask<small>blocked if unsafe</small></button>
+            <button type="button" data-m="acceptEdits">Edit<small>may change files</small></button>
+          </div>
+          <label for="tPrompt">Prompt</label>
+          <textarea id="tPrompt" placeholder="e.g. Review the last commit for bugs and summarise what you find"></textarea>
+          <div class="actions" style="margin-top:12px"><span class="sub" style="flex:1;align-self:center">⌘↩ to run</span><button class="btn primary" type="submit">Run task</button></div>
+        </form>
+        <div class="list" id="rlist" style="margin-top:14px"></div>
+      </div>
+      <div class="panel runview" id="runview" style="margin-top:0">
+        <div class="empty" style="margin:auto;border:0">Pick a task to see its output.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- session drawer -->
+<aside class="drawer" id="drawer">
+  <div class="dh">
+    <div class="grow">
+      <div id="dMeta" class="sub"></div>
+      <h3 id="dTitle"></h3>
+    </div>
+    <button class="btn ghost sm" data-close-drawer title="Close (Esc)">✕</button>
+  </div>
+  <div class="dacts" id="dActs"></div>
+  <div class="feed" id="dFeed"></div>
+</aside>
+
+<!-- create / edit -->
+<div class="scrim" id="editScrim">
+  <form class="modal" id="editForm" autocomplete="off">
+    <h2 id="editTitle">New account</h2>
+    <p class="hint" id="editHint">Give it a name you'll recognise — a client, a team, or "Personal".</p>
+    <label for="fName">Name</label>
+    <input type="text" id="fName" maxlength="40" placeholder="e.g. Nexora" required>
+    <label for="fNote">Note <span class="sub">(optional)</span></label>
+    <input type="text" id="fNote" maxlength="80" placeholder="e.g. Team plan · josh@nexoraweb.agency">
+    <label>Colour</label>
+    <div class="swatches" id="swatches"></div>
+    <label for="fDir">Terminal starts in</label>
+    <input type="text" id="fDir" placeholder="~/Desktop/DEV">
+    <div class="actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn primary" id="editSave">Create</button>
+    </div>
+  </form>
+</div>
+
+<!-- settings -->
+<div class="scrim" id="setScrim">
+  <form class="modal" id="setForm">
+    <h2>Settings</h2>
+    <label for="sTerm">Terminal app</label>
+    <select id="sTerm"><option>Terminal</option><option>iTerm</option></select>
+    <label for="sDesk">Claude desktop app name</label>
+    <input type="text" id="sDesk">
+    <label for="sBrow">Browser for claude.ai windows</label>
+    <select id="sBrow"><option>Google Chrome</option><option>Brave Browser</option><option>Microsoft Edge</option><option>Arc</option><option>Chromium</option></select>
+    <label for="sCli">Claude Code command</label>
+    <input type="text" id="sCli">
+    <label style="margin-top:18px">Mac notifications</label>
+    <label class="check"><input type="checkbox" id="nDone"> When a session or task finishes</label>
+    <label class="check"><input type="checkbox" id="nAppr"> When a session seems to be waiting for approval</label>
+    <label class="check"><input type="checkbox" id="nLim"> When an account nears its plan limit</label>
+    <label for="sTh">Limit alerts at (%)</label>
+    <input type="text" id="sTh" placeholder="80, 95">
+    <div class="actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</div>
+
+<!-- confirm -->
+<div class="scrim" id="confScrim">
+  <div class="modal">
+    <h2 id="confTitle">Remove account?</h2>
+    <p class="hint" id="confText"></p>
+    <div class="actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="confOk" style="background:var(--danger);border-color:var(--danger)">Remove</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="tip" id="tip"></div>
+
+<script>
+const TOKEN = "__TOKEN__";
+const COLORS = ["#d97757","#6a9bcc","#788c5d","#b07cc6","#c9a227","#4fa3a5","#c75b7a","#7f8c9b"];
+const ICONS = {
+  desktop:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  cli:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>',
+  browser:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.6 4 6 4 9.5s-1.4 6.9-4 9.5c-2.6-2.6-4-6-4-9.5s1.4-6.9 4-9.5z"/></svg>',
+};
+const LABEL = {desktop:"Desktop", cli:"Terminal", browser:"Browser"};
+const SLABEL = {working:"Working", needs_you:"Your turn", waiting:"Needs approval?", idle:"Idle",
+  running:"Running", done:"Done", error:"Failed", stopped:"Stopped", interrupted:"Interrupted", starting:"Starting"};
+let S = {profiles:[], settings:{}}, SESS = [], USAGE = null, RUNS = [], NOTES = [], seenNotes = 0;
+let tab = "accounts", editing = null, pickColor = COLORS[1], openMenu = null, sFilter = "active", drawerSid = null, runSel = null, chartMode = "tokens", tMode = "plan";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(path, body){
+  const r = await fetch(path, {method: body===undefined ? "GET" : "POST",
+    headers: {"X-Token": TOKEN, "Content-Type": "application/json"},
+    body: body===undefined ? undefined : JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if(!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600); }
+function rel(ts){ if(!ts) return "never"; const s=(Date.now()/1000-ts); if(s<45) return "just now"; if(s<3600) return `${Math.floor(s/60)}m ago`; if(s<86400) return `${Math.floor(s/3600)}h ago`; return `${Math.floor(s/86400)}d ago`; }
+function dur(sec){ if(sec<60) return `${Math.round(sec)}s`; if(sec<3600) return `${Math.round(sec/60)}m`; if(sec<86400) return `${Math.floor(sec/3600)}h ${Math.round(sec%3600/60)}m`; return `${Math.floor(sec/86400)}d ${Math.round(sec%86400/3600)}h`; }
+function ago(ts){ return ts ? "used " + rel(ts) : "never used"; }
+function tok(n){ n=n||0; if(n>=1e9) return (n/1e9).toFixed(1)+"B"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return Math.round(n/1e3)+"k"; return String(n); }
+function money(n){ return "$" + (n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function initials(n){ return (n.match(/[A-Za-z0-9]+/g)||[]).slice(0,2).map(w=>w[0]).join("").toUpperCase() || "?"; }
+function prof(id){ return S.profiles.find(p=>p.id===id) || {name:id, color:"#888", id}; }
+function sev(v){ return v>=90 ? "d" : v>=70 ? "w" : ""; }
+function pill(st, extra=""){ return `<span class="pill ${st}"><i class="dot"></i>${SLABEL[st]||st}${extra}</span>`; }
+function badge(id){ const p=prof(id); return `<span class="acc-badge" style="--c:${esc(p.color)}"><i></i>${esc(p.name)}</span>`; }
+
+// ------------------------------------------------------------------ data
+async function refresh(){
+  try {
+    const [st, se, ru, no] = await Promise.all([api("/api/state"), api("/api/sessions"), api("/api/runs"), api("/api/notifications")]);
+    S = st; SESS = se.sessions; RUNS = ru.runs; NOTES = no.items;
+    document.body.classList.remove("down");
+    if(tab === "usage" || !USAGE) USAGE = await api("/api/usage");
+    renderAll();
+  } catch(e){ document.body.classList.add("down"); }
+}
+function renderAll(){
+  $("#dryBanner").style.display = S.dry_run ? "block" : "none";
+  if(S.aliases_file) $("#aliasLine").textContent = "source " + S.aliases_file;
+  const active = SESS.filter(s => s.status !== "idle").length;
+  $("#cSessions").textContent = active; $("#cSessions").classList.toggle("hot", SESS.some(s=>s.status==="needs_you"||s.status==="waiting"));
+  const running = RUNS.filter(r=>r.status==="running"||r.status==="starting").length;
+  $("#cTasks").textContent = running || RUNS.length; $("#cTasks").classList.toggle("hot", running>0);
+  renderBell(); renderAccounts();
+  if(tab==="sessions") renderSessions();
+  if(tab==="usage") renderUsage();
+  if(tab==="tasks") renderTasks();
+  if(drawerSid) loadDrawer(false);
+}
+function sorted(){
+  return [...S.profiles].sort((a,b)=> (b.builtin?1:0)-(a.builtin?1:0) || (!!b.pinned)-(!!a.pinned) || a.created-b.created);
+}
+
+// ------------------------------------------------------------------ tabs
+function setTab(t){
+  tab = t;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
+  document.querySelectorAll("section.view").forEach(v=>v.classList.toggle("on", v.id==="v-"+t));
+  try{ localStorage.setItem("cam.tab", t); }catch(_){}
+  if(t==="usage") api("/api/usage").then(u=>{USAGE=u; renderUsage();}).catch(()=>{});
+  renderAll();
+}
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+// ------------------------------------------------------------------ accounts
+function bestBanner(el){
+  const b = S.best; if(!b){ el.style.display="none"; return; }
+  const p = prof(b.profile);
+  el.style.display = "block";
+  el.innerHTML = `<b>${esc(p.name)}</b> has the most headroom right now — ${b.headroom}% left on its tightest limit.`;
+}
+function renderAccounts(){
+  const q = $("#q").value.trim().toLowerCase();
+  const list = sorted();
+  const shown = list.filter(p => !q || [p.name,p.note,p.account?.email,p.id].join(" ").toLowerCase().includes(q));
+  const live = list.filter(p => Object.values(p.running).some(Boolean)).length;
+  const wins = list.reduce((n,p)=> n + Object.values(p.running).reduce((a,b)=>a+b,0), 0);
+  $("#stats").innerHTML = `<span class="chip"><b>${list.length}</b> accounts</span><span class="chip"><b>${live}</b> active · <b>${wins}</b> windows</span>`;
+  $("#guide").style.display = list.length > 2 ? "none" : "block";
+  bestBanner($("#bestBanner"));
+
+  $("#grid").innerHTML = shown.map(p => {
+    const idx = list.indexOf(p) + 1;
+    const r = p.running, on = Object.values(r).some(Boolean);
+    const email = p.account?.email;
+    const tile = k => {
+      const n = r[k] || 0;
+      const status = n ? (k==="cli" && n>1 ? `${n} sessions` : "running") : "start";
+      const canStop = n && k !== "cli";
+      return `<button class="tile ${n?'on':''}" data-act="${k}" data-id="${p.id}" title="${n && k==='cli' ? 'Open another' : 'Open'} ${LABEL[k]} for ${esc(p.name)}">
+        ${canStop ? `<span class="x" role="button" data-stop="${k}" data-id="${p.id}" title="Quit ${LABEL[k]}">✕</span>` : ""}
+        ${ICONS[k]}<span class="lbl">${LABEL[k]}</span><span class="st"><i class="dot ${n?'on':''}"></i>${status}</span></button>`;
+    };
+    const minis = (p.plan?.available && p.plan.metrics.length) ? `<div class="minis">${p.plan.metrics.map(m=>`
+      <div class="mini" title="${p.plan.stale ? 'Last reading ' + rel(p.plan.observed) + ' — open the desktop app to refresh' : 'Updated ' + rel(p.plan.observed)}"><div class="row"><span>${esc(m.label)}</span><b>${Math.round(m.value)}%${p.plan.stale?' ·':''}</b></div>
+      <div class="meter"><i class="${sev(m.value)}" style="width:${Math.min(100,m.value)}%"></i></div></div>`).join("")}</div>` : "";
+    const ss = p.sessions || {};
+    const liveRow = (ss.working||ss.needs_you||ss.waiting) ? `<div class="live-row">
+      ${ss.needs_you?`<button class="pill needs_you" data-goto-sessions="${p.id}"><i class="dot"></i>${ss.needs_you} your turn</button>`:""}
+      ${ss.waiting?`<button class="pill waiting" data-goto-sessions="${p.id}"><i class="dot"></i>${ss.waiting} needs approval?</button>`:""}
+      ${ss.working?`<button class="pill working" data-goto-sessions="${p.id}"><i class="dot"></i>${ss.working} working</button>`:""}</div>` : "";
+    const isBest = S.best && S.best.profile === p.id;
+    return `<article class="card ${on?'live':''}" style="--c:${esc(p.color)}">
+      <div class="bar"></div>
+      <div class="top">
+        <div class="avatar">${esc(initials(p.name))}</div>
+        <div class="title">
+          <div class="name">${esc(p.name)} ${p.builtin?'<span class="tag">default</span>':''} ${p.pinned?'<span class="tag">pinned</span>':''} ${isBest?'<span class="tag best">most headroom</span>':''}</div>
+          <div class="note">${esc(p.note) || (p.builtin ? "Your normal Claude install" : "&nbsp;")}</div>
+          <div class="acct">${email ? `<span title="Signed in to Claude Code">● <span class="em">${esc(email)}</span></span>` : (p.builtin ? "" : (p.account && p.initialised.cli ? "Not signed in to Claude Code yet" : "Sign in on first launch"))}</div>
+        </div>
+        ${idx<=9?`<span class="kbd" title="Press ${idx} to open Desktop">${idx}</span>`:""}
+        <button class="btn ghost sm" data-menu="${p.id}" title="More">•••</button>
+      </div>
+      <div class="menu" id="menu-${p.id}">
+        <button data-edit="${p.id}">✎ Edit name, colour, folder</button>
+        <button data-pin="${p.id}">${p.pinned?"☆ Unpin":"★ Pin to top"}</button>
+        <button data-newtask="${p.id}">▶ Run a task with this account</button>
+        <hr>
+        <button data-reveal="cli" data-id="${p.id}">📁 Show Claude Code folder</button>
+        ${p.builtin?"":`<button data-reveal="desktop" data-id="${p.id}">📁 Show desktop data folder</button>`}
+        <button data-copycmd="${p.id}">⧉ Copy terminal command</button>
+        ${p.builtin?"":`<hr><button class="danger" data-remove="${p.id}">Remove account…</button>`}
+      </div>
+      ${minis}${liveRow}
+      <div class="launch">${tile("desktop")}${tile("cli")}${tile("browser")}</div>
+      <div class="foot"><span class="grow">${ago(p.last_used)}</span>${p.today?.tokens ? `<span title="Claude Code tokens today">${tok(p.today.tokens)} today</span>` : ""}<span class="num">${p.builtin?"":"claude-"+esc(p.id)}</span></div>
+    </article>`;
+  }).join("") + (q ? "" : `<button class="add-card" id="addCard"><div><span>＋</span>New account</div></button>`);
+  const ac = $("#addCard"); if(ac) ac.onclick = () => openEdit(null);
+}
+
+// ------------------------------------------------------------------ sessions
+function renderSessions(){
+  const sel = $("#sAcct"), cur = sel.value;
+  sel.innerHTML = `<option value="">All accounts</option>` + sorted().map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  sel.value = cur;
+  const counts = {active:0, needs_you:0, waiting:0, working:0, all:SESS.length};
+  SESS.forEach(s => { if(s.status!=="idle") counts.active++; if(counts[s.status]!==undefined) counts[s.status]++; });
+  const F = [["active","Active"],["needs_you","Your turn"],["waiting","Needs approval?"],["working","Working"],["all","All recent"]];
+  $("#sFilters").innerHTML = F.map(([k,l])=>`<button class="chip ${sFilter===k?'on':''}" data-sfilter="${k}">${l} <b>${counts[k]}</b></button>`).join("");
+  const q = $("#sq").value.trim().toLowerCase();
+  let rows = SESS.filter(s => (!sel.value || s.profile===sel.value) &&
+    (sFilter==="all" || (sFilter==="active" ? s.status!=="idle" : s.status===sFilter)) &&
+    (!q || [s.title,s.project,s.cwd,s.last_prompt,s.last_text,prof(s.profile).name].join(" ").toLowerCase().includes(q)));
+  const order = {waiting:0, needs_you:1, working:2, idle:3};
+  rows.sort((a,b)=> (order[a.status]-order[b.status]) || b.last_ts-a.last_ts);
+  if(!rows.length){
+    $("#slist").innerHTML = `<div class="empty">${sFilter==="active" ? "No live sessions right now. Open <b>Terminal</b> on an account, or switch to <b>All recent</b>." : "Nothing here yet."}</div>`;
+    return;
+  }
+  $("#slist").innerHTML = rows.slice(0,200).map(s => {
+    const sub = s.status==="waiting" ? `Waiting on ${esc(s.last_tool||"a tool")}` :
+                s.status==="needs_you" && s.last_text ? esc(s.last_text) :
+                s.status==="working" && s.last_tool ? `Running ${esc(s.last_tool)}…` : esc(s.last_prompt || s.last_text || "");
+    return `<button class="srow ${drawerSid===s.profile+"/"+s.key?'sel':''}" data-session="${esc(s.profile)}/${esc(s.key)}">
+      <div>${pill(s.status)}</div>
+      <div class="main"><div class="t1">${esc(s.title)}</div><div class="t2">${sub}</div></div>
+      <div class="meta">${badge(s.profile)}<br>${esc(s.project)}${s.branch?` · ${esc(s.branch)}`:""} · ${rel(s.last_ts)}<br>${tok(s.tokens)} tok · ${money(s.cost)}</div>
+    </button>`;
+  }).join("");
+}
+$("#sq").addEventListener("input", renderSessions);
+$("#sAcct").addEventListener("change", renderSessions);
+
+async function openDrawer(key){ drawerSid = key; $("#drawer").classList.add("open"); $("#dFeed").innerHTML = `<div class="muted">Loading…</div>`; await loadDrawer(true); renderSessions(); }
+function closeDrawer(){ drawerSid = null; $("#drawer").classList.remove("open"); renderSessions(); }
+async function loadDrawer(scroll){
+  if(!drawerSid) return;
+  const [pid, sid] = drawerSid.split("/");
+  const s = SESS.find(x => x.profile===pid && x.key===sid) || {};
+  let d; try{ d = await api(`/api/sessions/${pid}/${sid}`); }catch(e){ $("#dFeed").innerHTML = `<div class="msg error">${esc(e.message)}</div>`; return; }
+  $("#dTitle").textContent = d.title || s.title || "Session";
+  $("#dMeta").innerHTML = `${badge(pid)} · ${esc(s.project||"")} ${s.status?pill(s.status):""}`;
+  $("#dActs").innerHTML = `<button class="btn sm primary" data-resume="${esc(pid)}/${esc(sid)}">Resume in Terminal</button>
+    <button class="btn sm" data-copyresume="${esc(pid)}/${esc(sid)}">Copy resume command</button>
+    <span class="sub" style="align-self:center;margin-left:auto">${esc(d.cwd||"")}</span>`;
+  const feed = $("#dFeed"), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+  feed.innerHTML = feedHtml(d.messages) || `<div class="muted">No messages yet.</div>`;
+  if(scroll || atBottom) feed.scrollTop = feed.scrollHeight;
+}
+function feedHtml(msgs){
+  return (msgs||[]).map(m => {
+    const ts = m.t ? `<span class="ts">${new Date(m.t*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span>` : "";
+    if(m.kind==="tool") return `<div class="msg tool"><b>${esc(m.name)}</b> ${esc(m.text)}</div>`;
+    if(m.kind==="result") return `<div class="msg result ${m.error?'err':''}">↳ ${esc(m.text)}</div>`;
+    if(m.kind==="error") return `<div class="msg error">${esc(m.text)}</div>`;
+    if(m.kind==="system") return `<div class="msg system">${esc(m.text)}</div>`;
+    return `<div class="msg ${m.kind}">${esc(m.text)}${ts}</div>`;
+  }).join("");
+}
+
+// ------------------------------------------------------------------ usage
+function renderUsage(){
+  if(!USAGE) return;
+  const list = sorted();
+  bestBanner($("#uBest"));
+  const now = Date.now()/1000;
+  $("#ugrid").innerHTML = list.map(p => {
+    const pl = USAGE.plan[p.id] || {}, tk = USAGE.tokens[p.id]?.windows || {};
+    let limits;
+    if(pl.available){
+      limits = pl.metrics.filter(m=>m.window).map(m => {
+        let fc = "";
+        if(m.stale) fc = `Last reading ${rel(pl.observed)} — open this account's desktop app to refresh`;
+        else if(m.value >= 100) fc = "Limit reached";
+        else if(m.eta){ const left = m.eta - now; fc = left > m.window ? `On pace — won't hit the limit this window (+${m.rate_per_hour}%/h)` : `≈ ${dur(left)} to the limit at +${m.rate_per_hour}%/h`; }
+        else fc = "Flat — no measurable burn";
+        return `<div class="limit"><div class="row"><span>${esc(m.label)}</span><b>${m.value.toFixed(0)}%</b></div>
+          <div class="meter"><i class="${sev(m.value)}" style="width:${Math.min(100,m.value)}%"></i></div>
+          <div class="fc">${fc}</div></div>`;
+      }).join("");
+      const xu = pl.metrics.find(m=>m.code==="xu");
+      if(xu) limits += `<div class="fc muted">Extra usage: ${xu.value}</div>`;
+      limits += `<div class="fc muted" style="margin-top:-4px">Updated ${rel(pl.observed)}</div>`;
+    } else {
+      limits = `<p class="muted" style="font-size:12.5px;margin:0 0 10px">No plan-limit readings yet. Open this account's <b>Desktop</b> app — it records its 5-hour and weekly usage every few minutes.</p>`;
+    }
+    const W = [["5h","5 hours"],["today","Today"],["7d","7 days"],["30d","30 days"]];
+    const table = `<table class="ttable"><tr><th>Claude Code</th><th>Tokens</th><th>API-equiv.</th></tr>${W.map(([k,l])=>`<tr><td>${l}</td><td>${tok(tk[k]?.tokens)}</td><td>${money(tk[k]?.cost)}</td></tr>`).join("")}</table>`;
+    const fam = tk["7d"]?.by_family || {}, ft = Object.values(fam).reduce((a,b)=>a+b,0);
+    const famLine = ft ? `<div class="fc muted" style="margin-top:6px">7-day mix: ${Object.entries(fam).sort((a,b)=>b[1]-a[1]).map(([f,v])=>`${f} ${Math.round(v/ft*100)}%`).join(" · ")}</div>` : "";
+    return `<article class="card ucard" style="--c:${esc(p.color)}">
+      <div class="uh"><div class="avatar sm">${esc(initials(p.name))}</div><b style="flex:1">${esc(p.name)}</b>${S.best?.profile===p.id?'<span class="tag best">most headroom</span>':''}</div>
+      ${limits}${table}${famLine}</article>`;
+  }).join("");
+  renderChart(list);
+}
+function renderChart(list){
+  const series = list.map(p => ({p, d: USAGE.tokens[p.id]?.daily || []})).filter(s => s.d.some(x=>x.tokens));
+  if(!series.length){ $("#chart").innerHTML = `<div class="empty">No Claude Code activity in the last 14 days.</div>`; $("#chartLegend").innerHTML=""; return; }
+  const days = series[0].d.map(x=>x.day), key = chartMode;
+  const totals = days.map((_,i)=> series.reduce((a,s)=>a+(s.d[i]?.[key]||0),0));
+  const max = Math.max(...totals, 1e-9);
+  const Wd = 760, Hd = 200, padL = 46, padB = 22, bw = (Wd-padL)/days.length;
+  const y = v => Hd - padB - (v/max)*(Hd-padB-8);
+  const fmt = v => key==="cost" ? money(v) : tok(v);
+  let g = "";
+  [0, .5, 1].forEach(f => { const v=max*f, yy=y(v); g += `<line x1="${padL}" x2="${Wd}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${padL-6}" y="${yy+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmt(v)}</text>`; });
+  days.forEach((d,i) => {
+    let acc = 0; const x = padL + i*bw + bw*0.18, w = bw*0.64;
+    series.forEach(s => { const v = s.d[i]?.[key]||0; if(!v) return; const y0=y(acc), y1=y(acc+v); acc+=v;
+      g += `<rect x="${x}" y="${y1}" width="${w}" height="${Math.max(1,y0-y1-1)}" rx="2" fill="${s.p.color}" data-tip="${esc(s.p.name)} · ${new Date(d*1000).toLocaleDateString([], {month:'short',day:'numeric'})} · ${fmt(v)}"/>`; });
+    if(i%2===0 || days.length<10) g += `<text x="${x+w/2}" y="${Hd-6}" text-anchor="middle" font-size="10" fill="var(--muted)">${new Date(d*1000).toLocaleDateString([], {day:'numeric',month:'short'})}</text>`;
+  });
+  $("#chart").innerHTML = `<svg class="chart" viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="Daily Claude Code ${key} per account">${g}</svg>`;
+  $("#chartLegend").innerHTML = series.map(s=>`<span><i style="background:${s.p.color}"></i>${esc(s.p.name)}</span>`).join("");
+}
+document.querySelectorAll("#chartMode button").forEach(b => b.onclick = () => { chartMode=b.dataset.m; document.querySelectorAll("#chartMode button").forEach(x=>x.classList.toggle("on",x===b)); renderUsage(); });
+document.addEventListener("mousemove", e => { const t=e.target.closest?.("[data-tip]"), tip=$("#tip");
+  if(!t){ tip.style.display="none"; return; } tip.textContent=t.dataset.tip; tip.style.display="block"; tip.style.left=(e.clientX+12)+"px"; tip.style.top=(e.clientY-30)+"px"; });
+
+// ------------------------------------------------------------------ tasks
+let projLoaded = false;
+async function renderTasks(){
+  const sel = $("#tAcct"), cur = sel.value;
+  sel.innerHTML = sorted().map(p=>`<option value="${esc(p.id)}">${esc(p.name)}${S.best?.profile===p.id?" — most headroom":""}</option>`).join("");
+  if(cur) sel.value = cur; else if(S.best) sel.value = S.best.profile;
+  if(!projLoaded){ projLoaded = true; try{ const pj = await api("/api/projects"); $("#projList").innerHTML = pj.projects.map(x=>`<option value="${esc(x)}">`).join(""); }catch(_){} }
+  $("#rlist").innerHTML = RUNS.length ? RUNS.map(r => `<button class="srow ${runSel===r.id?'sel':''}" data-run="${r.id}" style="grid-template-columns:auto 1fr">
+      <div>${pill(r.status)}</div>
+      <div class="main"><div class="t1">${esc(r.prompt)}</div><div class="t2">${badge(r.profile)} · ${esc(r.project)} · ${rel(r.started)}${r.cost!=null?` · ${money(r.cost)}`:""}</div></div></button>`).join("")
+    : `<div class="empty">No tasks yet.</div>`;
+  if(runSel) loadRun(false);
+}
+async function loadRun(scroll){
+  let r; try{ r = await api(`/api/runs/${runSel}`); }catch(e){ return; }
+  const live = r.status==="running"||r.status==="starting";
+  const rv = $("#runview");
+  const old = rv.querySelector(".feed"), atBottom = !old || old.scrollHeight - old.scrollTop - old.clientHeight < 60;
+  rv.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">
+      <div style="flex:1;min-width:0"><div class="sub">${badge(r.profile)} · ${esc(r.cwd)} · ${esc(r.mode)}${r.model?` · ${esc(r.model)}`:""}</div>
+      <h3 style="margin:4px 0 0;font-size:15px">${esc(r.prompt)}</h3></div>${pill(r.status)}</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      ${live?`<button class="btn sm" data-runstop="${r.id}">■ Stop</button>`:""}
+      <button class="btn sm" data-runterm="${r.id}" ${r.session_id?"":"disabled"}>Continue in Terminal</button>
+      <button class="btn sm" data-rerun="${r.id}">↻ Run again</button>
+      <span class="sub" style="margin-left:auto;align-self:center">${r.ended?`took ${dur(r.ended-r.started)}`:`running ${dur(Date.now()/1000-r.started)}`}${r.turns?` · ${r.turns} turns`:""}${r.cost!=null?` · ${money(r.cost)}`:""}</span>
+    </div>
+    <div class="feed">${feedHtml(r.events) || '<div class="muted">Waiting for output…</div>'}</div>`;
+  const f = rv.querySelector(".feed"); if(scroll || atBottom) f.scrollTop = f.scrollHeight;
+}
+document.querySelectorAll("#tModes button").forEach(b => b.onclick = () => { tMode=b.dataset.m; document.querySelectorAll("#tModes button").forEach(x=>x.classList.toggle("on",x===b)); });
+$("#taskForm").onsubmit = async e => {
+  e.preventDefault();
+  try{
+    const r = await api("/api/runs", {profile:$("#tAcct").value, cwd:$("#tDir").value, prompt:$("#tPrompt").value, mode:tMode});
+    $("#tPrompt").value = ""; runSel = r.id; toast(`Task started on ${prof(r.profile).name}`);
+    RUNS = (await api("/api/runs")).runs; renderTasks(); loadRun(true);
+  }catch(err){ toast("⚠ " + err.message); }
+};
+$("#tPrompt").addEventListener("keydown", e => { if(e.key==="Enter" && (e.metaKey||e.ctrlKey)) $("#taskForm").requestSubmit(); });
+
+// ------------------------------------------------------------------ notifications
+function renderBell(){
+  const unseen = NOTES.filter(n => n.t > seenNotes).length;
+  $("#bellN").textContent = unseen; $("#bellN").classList.toggle("on", unseen>0);
+  $("#notes").innerHTML = NOTES.length ? NOTES.slice(0,30).map(n=>`<div class="it"><b>${esc(n.title)}</b>${esc(n.body)}<div class="muted" style="font-size:11px">${rel(n.t)}</div></div>`).join("") : `<div class="it muted">Nothing yet. You'll see finished sessions, approval waits and limit alerts here.</div>`;
+}
+$("#bellBtn").onclick = e => { e.stopPropagation(); $("#notes").classList.toggle("open"); seenNotes = Date.now()/1000; try{localStorage.setItem("cam.seen", seenNotes);}catch(_){} renderBell(); };
+
+// ------------------------------------------------------------------ clicks
+document.addEventListener("click", async e => {
+  if(!e.target.closest(".bell")) $("#notes").classList.remove("open");
+  const t = e.target.closest("[data-stop],[data-act],[data-menu],[data-edit],[data-pin],[data-reveal],[data-copycmd],[data-remove],[data-copy],[data-close],[data-sfilter],[data-session],[data-close-drawer],[data-resume],[data-copyresume],[data-run],[data-runstop],[data-runterm],[data-rerun],[data-newtask],[data-goto-sessions]");
+  if(!t){ closeMenus(); return; }
+  const id = t.dataset.id;
+  try{
+    if(t.dataset.stop){ e.stopPropagation(); const k=t.dataset.stop; const p=prof(id);
+      const res = await api(`/api/profiles/${id}/stop`, {kind:k}); toast(res.stopped ? `Quit ${LABEL[k]} for ${p.name}` : "Nothing to quit"); setTimeout(refresh,700); return; }
+    if(t.dataset.act){ const k=t.dataset.act, p=prof(id);
+      const res = await api(`/api/profiles/${id}/${k}`, {});
+      toast(res.already ? `${p.name} already has ${LABEL[k]} open — switch to it with ⌘Tab`
+        : (k==="desktop" && !p.builtin && !p.last_used) ? `Opening ${p.name} — sign in now, before opening another account` : `Opening ${LABEL[k]} · ${p.name}`);
+      t.animate([{transform:"scale(.96)"},{transform:"scale(1)"}],{duration:180}); setTimeout(refresh,1500); return; }
+    if(t.dataset.menu){ e.stopPropagation(); const m=$("#menu-"+t.dataset.menu); const was=m.classList.contains("open"); closeMenus(); if(!was){m.classList.add("open"); openMenu=m;} return; }
+    closeMenus();
+    if(t.dataset.edit) return openEdit(prof(t.dataset.edit));
+    if(t.dataset.pin){ const p=prof(t.dataset.pin); await api(`/api/profiles/${p.id}/update`, {pinned:!p.pinned}); return refresh(); }
+    if(t.dataset.reveal){ await api(`/api/profiles/${id}/reveal`, {kind:t.dataset.reveal}); return toast("Opened in Finder"); }
+    if(t.dataset.copycmd){ const p=prof(t.dataset.copycmd);
+      const cmd = p.builtin ? "claude" : `CLAUDE_CONFIG_DIR="${p.paths.cli}" claude`; await copy(cmd); return toast("Command copied"); }
+    if(t.dataset.remove) return confirmRemove(prof(t.dataset.remove));
+    if(t.dataset.copy){ await copy($("#"+t.dataset.copy).textContent); return toast("Copied"); }
+    if(t.dataset.close !== undefined) return closeModals();
+    if(t.dataset.sfilter){ sFilter = t.dataset.sfilter; return renderSessions(); }
+    if(t.dataset.gotoSessions){ $("#sAcct").value = ""; setTab("sessions"); $("#sAcct").value = t.dataset.gotoSessions; sFilter="active"; return renderSessions(); }
+    if(t.dataset.session) return openDrawer(t.dataset.session);
+    if(t.dataset.closeDrawer !== undefined) return closeDrawer();
+    if(t.dataset.resume){ const [pid,sid]=t.dataset.resume.split("/"); await api(`/api/profiles/${pid}/resume`, {session_id:sid}); return toast(`Resuming in Terminal · ${prof(pid).name}`); }
+    if(t.dataset.copyresume){ const [pid,sid]=t.dataset.copyresume.split("/"); const p=prof(pid); const s=SESS.find(x=>x.key===sid)||{};
+      await copy(`cd ${JSON.stringify(s.cwd||"~")} && ${p.builtin?"":`CLAUDE_CONFIG_DIR="${p.paths.cli}" `}claude --resume ${s.id}`); return toast("Resume command copied"); }
+    if(t.dataset.run){ runSel = t.dataset.run; renderTasks(); return loadRun(true); }
+    if(t.dataset.runstop){ await api(`/api/runs/${t.dataset.runstop}/stop`, {}); toast("Stopping…"); return setTimeout(refresh,800); }
+    if(t.dataset.runterm){ await api(`/api/runs/${t.dataset.runterm}/terminal`, {}); return toast("Continuing in Terminal"); }
+    if(t.dataset.rerun){ const r = RUNS.find(x=>x.id===t.dataset.rerun); $("#tAcct").value=r.profile; $("#tDir").value=r.cwd; $("#tPrompt").value=r.prompt;
+      tMode=r.mode; document.querySelectorAll("#tModes button").forEach(x=>x.classList.toggle("on",x.dataset.m===r.mode)); $("#tPrompt").focus(); return; }
+    if(t.dataset.newtask){ const p=prof(t.dataset.newtask); setTab("tasks"); $("#tAcct").value=p.id; $("#tDir").value=p.workdir||""; $("#tPrompt").focus(); return; }
+  }catch(err){ toast("⚠ " + err.message); }
+});
+function closeMenus(){ document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open")); openMenu=null; }
+function closeModals(){ document.querySelectorAll(".scrim.open").forEach(m=>m.classList.remove("open")); }
+async function copy(s){ try{ await navigator.clipboard.writeText(s); }catch(_){ const a=document.createElement("textarea"); a.value=s; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); } }
+document.querySelectorAll(".scrim").forEach(s => s.addEventListener("mousedown", e => { if(e.target===s) closeModals(); }));
+
+// ------------------------------------------------------------------ create / edit
+function swatches(){
+  $("#swatches").innerHTML = COLORS.map(c => `<button type="button" class="sw ${c===pickColor?'sel':''}" style="background:${c}" data-c="${c}" aria-label="colour ${c}"></button>`).join("");
+  $("#swatches").querySelectorAll(".sw").forEach(b => b.onclick = () => { pickColor=b.dataset.c; swatches(); });
+}
+function openEdit(p){
+  editing = p;
+  $("#editTitle").textContent = p ? `Edit ${p.name}` : "New account";
+  $("#editHint").style.display = p ? "none" : "block";
+  $("#editSave").textContent = p ? "Save" : "Create";
+  $("#fName").value = p ? p.name : "";
+  $("#fNote").value = p ? (p.note||"") : "";
+  $("#fDir").value = p ? (p.workdir||"") : "~";
+  pickColor = p ? p.color : COLORS[S.profiles.length % COLORS.length];
+  swatches();
+  $("#editScrim").classList.add("open");
+  setTimeout(()=>$("#fName").focus(), 30);
+}
+$("#addBtn").onclick = () => openEdit(null);
+$("#editForm").onsubmit = async e => {
+  e.preventDefault();
+  const body = {name:$("#fName").value, note:$("#fNote").value, workdir:$("#fDir").value, color:pickColor};
+  try{
+    if(editing){ await api(`/api/profiles/${editing.id}/update`, body); toast("Saved"); }
+    else { const p = await api("/api/profiles", body); toast(`Created ${p.name} — launch it and sign in once`); }
+    closeModals(); refresh();
+  }catch(err){ toast("⚠ " + err.message); }
+};
+function confirmRemove(p){
+  $("#confTitle").textContent = `Remove ${p.name}?`;
+  $("#confText").innerHTML = `It disappears from the dashboard and its sign-ins stop working here. Its data folders are moved to <code>~/.claude-system/archive</code>, not deleted. Quit its windows first.`;
+  $("#confOk").onclick = async () => { try{ await api(`/api/profiles/${p.id}/remove`, {}); closeModals(); toast(`Removed ${p.name}`); refresh(); }catch(err){ toast("⚠ "+err.message); } };
+  $("#confScrim").classList.add("open");
+}
+
+// ------------------------------------------------------------------ settings
+$("#settingsBtn").onclick = () => {
+  const s = S.settings;
+  $("#sTerm").value = s.terminal; $("#sDesk").value = s.desktop_app; $("#sCli").value = s.claude_cli;
+  const sb = $("#sBrow"); if(![...sb.options].some(o=>o.value===s.browser_app)) sb.add(new Option(s.browser_app)); sb.value = s.browser_app;
+  $("#nDone").checked = s.notify_done !== false; $("#nAppr").checked = s.notify_approval !== false; $("#nLim").checked = s.notify_limits !== false;
+  $("#sTh").value = (s.alert_thresholds||[80,95]).join(", ");
+  $("#setScrim").classList.add("open");
+};
+$("#setForm").onsubmit = async e => {
+  e.preventDefault();
+  try{ await api("/api/settings", {terminal:$("#sTerm").value, desktop_app:$("#sDesk").value, browser_app:$("#sBrow").value, claude_cli:$("#sCli").value,
+      notify_done:$("#nDone").checked, notify_approval:$("#nAppr").checked, notify_limits:$("#nLim").checked,
+      alert_thresholds:$("#sTh").value.split(/[,\s]+/).filter(Boolean).map(Number)});
+    closeModals(); toast("Settings saved"); refresh(); }catch(err){ toast("⚠ "+err.message); }
+};
+
+// ------------------------------------------------------------------ open all
+$("#allBtn").onclick = async () => {
+  const ids = sorted().filter(p => !p.running.desktop).map(p=>p.id);
+  if(!ids.length) return toast("Every desktop is already open");
+  try{ await api("/api/launch-all", {kind:"desktop", ids}); toast(`Opening ${ids.length} desktop window${ids.length>1?"s":""}`); setTimeout(refresh,2000); }catch(err){ toast("⚠ "+err.message); }
+};
+
+// ------------------------------------------------------------------ keyboard
+$("#q").addEventListener("input", renderAccounts);
+document.addEventListener("keydown", async e => {
+  const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+  if(e.key === "Escape"){ closeModals(); closeMenus(); closeDrawer(); $("#notes").classList.remove("open"); if(typing) document.activeElement.blur(); return; }
+  if(typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if(e.key === "/"){ e.preventDefault(); (tab==="sessions" ? $("#sq") : $("#q")).focus(); if(tab!=="sessions") setTab("accounts"); return; }
+  if(e.key === "n"){ e.preventDefault(); openEdit(null); return; }
+  const tk = {a:"accounts", s:"sessions", u:"usage", t:"tasks"}[e.key]; if(tk){ setTab(tk); return; }
+  const dm = /^Digit([1-9])$/.exec(e.code);
+  if(dm){
+    const p = sorted()[+dm[1] - 1]; if(!p) return;
+    const kind = e.shiftKey ? "cli" : "desktop";
+    try{ const res = await api(`/api/profiles/${p.id}/${kind}`, {}); toast(res.already ? `${p.name} is already open` : `Opening ${LABEL[kind]} · ${p.name}`); setTimeout(refresh,1500); }catch(err){ toast("⚠ "+err.message); }
+  }
+});
+
+try{ seenNotes = +localStorage.getItem("cam.seen") || 0; const t = localStorage.getItem("cam.tab"); if(t && $("#v-"+t)) tab = t; }catch(_){}
+setTab(tab);
+refresh();
+setInterval(() => { if(!document.hidden && !openMenu) refresh(); }, 3000);
+</script>
+</body>
+</html>
