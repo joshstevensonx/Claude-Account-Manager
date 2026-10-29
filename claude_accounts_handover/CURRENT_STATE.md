@@ -2,7 +2,7 @@
 
 ## Summary
 
-Version 2 is complete and has been written to the owner's Mac at `~/Desktop/DEV/claude_system/`. It hasn't been run on macOS yet: no feedback from the owner after installation.
+Version 3 (Workspace: multiple sessions in the GUI) is complete in the repo; version 2 is complete and has been written to the owner's Mac at `~/Desktop/DEV/claude_system/`. It hasn't been run on macOS yet: no feedback from the owner after installation.
 
 ## Evidence levels
 
@@ -25,6 +25,8 @@ Version 2 is complete and has been written to the owner's Mac at `~/Desktop/DEV/
 | UI: four tabs, drawer, modals, chart | Screenshots in light and dark; no JS errors; no horizontal scroll at 390 px |
 | Files installed on the Mac | All five files written to the Mac folder; executable bit set; syntax-checked with Python 3.10 in the Mac's Linux VM |
 
+| Version 3: Workspace tab — several Claude Code sessions side by side in the GUI, each on any account, with a message box per pane (`claude -p --resume`), stop, per-pane permission mode, enlarge, continue in Terminal; open from Sessions, Tasks or an account menu | **Real-tested** in the sandbox: two panes ran in parallel with separate session ids; a follow-up in one pane recalled its own earlier message; transcripts load through `/api/transcript`. UI checked in Chromium (light, dark, 390 px): no JS errors, no horizontal scroll |
+
 ## Not verified (needs the Mac)
 
 - Desktop app isolation through `--user-data-dir`, and whether sign-ins go to the right copy (A-02, A-07).
@@ -41,7 +43,8 @@ Version 2 is complete and has been written to the owner's Mac at `~/Desktop/DEV/
 4. The manager runs in a Terminal window; closing that window stops the dashboard. Claude windows keep running.
 5. The pricing table may be out of date for new model families (A-04).
 6. `Run again` fills in the form but doesn't submit it (by design).
-7. A `__pycache__/` folder appears next to the code after the first run. This is harmless.
+7. Workspace panes run headless, so in **Ask** mode tools that need approval are refused rather than prompted; use **Terminal** for those. Replying in a pane to a session that's also open in a Terminal branches it (the UI warns).
+8. A `__pycache__/` folder appears next to the code after the first run. This is harmless.
 
 ## Work in progress
 

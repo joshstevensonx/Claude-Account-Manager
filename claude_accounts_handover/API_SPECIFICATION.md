@@ -17,10 +17,11 @@ Every `/api/*` request needs the header `X-Token: <token>` and a Host header of 
 | `/api/runs/<id>` | The run summary plus `events:[{t,kind,text,name?,error?}]` |
 | `/api/notifications` | `{items:[{t,title,body,kind}]}`, newest first, up to 50 |
 | `/api/projects` | `{projects:[cwd…]}`: up to 30 recent distinct session folders |
+| `/api/transcript?profile=&sid=` | `{found, messages:[…]}` for a Claude Code session id (looks in `<cli>/projects/*/<sid>.jsonl` directly, so it works before the index catches up). Used by Workspace panes |
 
 A `plan_usage` result looks like `{available, observed, org, stale, binding:{code,label,value}, metrics:[{code,label,value,window,rate_per_hour,eta,stale,history:[[t,v]…]}]}`. When there is no data it is `{available:false, reason:"no-file"|"unreadable"|"empty"}`.
 
-A run summary has the fields `id, profile, cwd, project, prompt, mode, status (starting/running/done/error/stopped/interrupted), started, ended, session_id, model, cost, turns, result`.
+A run summary has the fields `id, profile, cwd, project, prompt, mode, status (starting/running/done/error/stopped/interrupted), started, ended, session_id, model, cost, turns, result, resume, source (task/chat)`. Runs with `source:"chat"` belong to Workspace panes and are hidden from the Tasks list.
 
 ## POST
 
@@ -28,14 +29,14 @@ A run summary has the fields `id, profile, cwd, project, prompt, mode, status (s
 |---|---|---|
 | `/api/profiles` | `{name, note?, color?, workdir?}` | Creates a profile and its folders, and regenerates the aliases. Returns the profile |
 | `/api/profiles/<id>/desktop` \| `cli` \| `browser` | `{workdir?}` | Launches. Returns `{ok}`, or `{ok, already:true}` if a desktop or browser copy is already running |
-| `/api/profiles/<id>/resume` | `{session_id: <key>}` | Opens Terminal with `--resume <sid>` in the session's folder |
+| `/api/profiles/<id>/resume` | `{session_id: <key>}` or `{sid, cwd}` | Opens Terminal with `--resume <sid>` in the session's folder (the `sid` form takes a Claude Code session id; validated) |
 | `/api/profiles/<id>/stop` | `{kind: desktop\|browser}` | Sends SIGTERM to the matching processes. Returns `{stopped:n}` |
 | `/api/profiles/<id>/update` | `{name?, note?, color?, workdir?, pinned?}` | Updates the profile |
 | `/api/profiles/<id>/remove` | – | Archives the folders. Refused for `default` |
 | `/api/profiles/<id>/reveal` | `{kind: cli\|desktop\|browser}` | Runs `open <folder>` (Finder) |
 | `/api/profiles/<id>/size` | – | Size in bytes of each folder |
 | `/api/launch-all` | `{kind, ids:[…]}` | Launches each, 0.4 s apart |
-| `/api/runs` | `{profile, cwd, prompt, mode: plan\|default\|acceptEdits}` | Starts a headless run. Returns its summary |
+| `/api/runs` | `{profile, cwd, prompt, mode: plan\|default\|acceptEdits, resume?, source?}` | Starts a headless run; `resume` (a session id) adds `--resume`. Returns its summary |
 | `/api/runs/<id>/stop` | – | Returns `{stopped:bool}` |
 | `/api/runs/<id>/terminal` | – | Runs `--resume <session_id>` in Terminal. Returns 400 if there's no session yet |
 | `/api/settings` | Any settings keys | Strings must not be empty. Booleans and threshold lists (1–100, at most 4) are validated |

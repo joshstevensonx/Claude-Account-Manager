@@ -14,6 +14,7 @@ Standard library only.
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -539,13 +540,32 @@ def osa(s):
 
 
 # --------------------------------------------------------------------------- headless runs
+SESSION_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+
+
+def session_file(projects_dir, sid):
+    """Transcript file of a Claude Code session id, or None."""
+    if not SESSION_ID.match(sid or ""):
+        return None
+    try:
+        for d in Path(projects_dir).iterdir():
+            fp = d / (sid + ".jsonl")
+            if fp.is_file():
+                return str(fp)
+    except OSError:
+        pass
+    return None
+
+
 class Run:
-    def __init__(self, profile, cwd, prompt, mode):
+    def __init__(self, profile, cwd, prompt, mode, resume=None, source="task"):
         self.id = uuid.uuid4().hex[:10]
         self.profile = profile
         self.cwd = cwd
         self.prompt = prompt
         self.mode = mode
+        self.resume = resume      # session id this run continues, if any
+        self.source = source      # "task" (Tasks tab) or "chat" (a Workspace pane)
         self.status = "starting"
         self.started = time.time()
         self.ended = None
@@ -559,7 +579,7 @@ class Run:
 
     def summary(self, events=False):
         d = {k: getattr(self, k) for k in ("id", "profile", "cwd", "prompt", "mode", "status", "started", "ended",
-                                           "session_id", "model", "cost", "turns", "result")}
+                                           "session_id", "model", "cost", "turns", "result", "resume", "source")}
         d["project"] = Path(self.cwd).name
         if events:
             d["events"] = self.events
@@ -594,7 +614,7 @@ class Runner:
 
     def _save(self):
         with self.lock:
-            runs = sorted(self.runs.values(), key=lambda r: r.started)[-40:]
+            runs = sorted(self.runs.values(), key=lambda r: r.started)[-120:]
             data = [r.summary(events=True) for r in runs]
         tmp = self.home / "runs.json.tmp"
         tmp.write_text(json.dumps(data))
@@ -608,23 +628,31 @@ class Runner:
         r = self.runs.get(rid)
         return r and r.summary(events=True)
 
-    def start(self, profile, name, cli, config_dir, cwd, prompt, mode):
+    def start(self, profile, name, cli, config_dir, cwd, prompt, mode, resume=None, source="task"):
         if mode not in self.MODES:
             raise ValueError("Unknown permission mode")
+        if resume and not SESSION_ID.match(resume):
+            raise ValueError("Bad session id")
         cwd = os.path.expanduser(cwd or "~")
         if not os.path.isdir(cwd):
             raise ValueError("Folder not found: %s" % cwd)
         if not prompt.strip():
             raise ValueError("Write a prompt first")
-        r = Run(profile, cwd, prompt.strip(), mode)
+        r = Run(profile, cwd, prompt.strip(), mode, resume, "chat" if source == "chat" else "task")
         with self.lock:
             self.runs[r.id] = r
         env = dict(os.environ)
+        # If the manager was started from inside Claude Code, don't let every run inherit that session.
+        for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
+                  "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PID"):
+            env.pop(k, None)
         if config_dir:
             env["CLAUDE_CONFIG_DIR"] = config_dir
         else:
             env.pop("CLAUDE_CONFIG_DIR", None)
         cmd = [cli, "-p", r.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", mode]
+        if resume:
+            cmd += ["--resume", resume]
         self.log(("DRY " if self.dry else "RUN ") + "task %s in %s: %s" % (r.id, cwd, " ".join(cmd[:2]) + " …"))
         threading.Thread(target=self._pump, args=(r, cmd, env, name), daemon=True).start()
         return r.summary()
@@ -641,6 +669,7 @@ class Runner:
             r.status = "running"
             self._event(r, "system", "Dry run: would run %s" % " ".join(cmd[:1] + ["-p", "…"] + cmd[3:]))
             time.sleep(1.5)
+            r.session_id = r.resume or str(uuid.uuid4())
             self._event(r, "assistant", "This is a simulated reply (dry-run mode).")
             r.status, r.ended, r.result, r.cost = "done", time.time(), "Simulated.", 0.0
             self._save()
@@ -695,7 +724,8 @@ class Runner:
             self._event(r, "error", short(err, 800))
         r.ended = time.time()
         self._save()
-        self.notifier.send("Task %s · %s" % ("finished" if r.status == "done" else r.status, Path(r.cwd).name),
+        what = "Reply" if r.source == "chat" else "Task"
+        self.notifier.send("%s %s · %s" % (what, "finished" if r.status == "done" else r.status, Path(r.cwd).name),
                            "%s — %s" % (name, short(r.prompt, 80)), "done")
 
     def stop(self, rid):
