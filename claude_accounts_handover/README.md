@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Package version | 1.0 |
+| Package version | 1.1 |
 | Generated | 2026-10-29 (Africa/Johannesburg) |
 | Context covered | One working session on 2026-10-29: the first question, two build rounds, and this handover request |
 | Project owner | Josh, a freelance web developer and data engineer based in Cape Town |

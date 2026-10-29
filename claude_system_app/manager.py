@@ -452,6 +452,15 @@ class Handler(BaseHTTPRequestHandler):
                 if not fp:
                     return self.send(404, {"error": "session not found"})
                 return self.send(200, {"messages": monitor.transcript(fp), "cwd": fs.cwd, "title": fs.title or fs.first_prompt})
+            if parts == ["api", "transcript"]:
+                # Transcript by Claude Code session id (Workspace panes; works before the index catches up).
+                p = find(q.get("profile", ""))
+                if not p:
+                    return self.send(404, {"error": "no such profile"})
+                fp = monitor.session_file(WATCH.index.projects_dir(p), q.get("sid", ""))
+                if not fp:
+                    return self.send(200, {"found": False, "messages": []})
+                return self.send(200, {"found": True, "messages": monitor.transcript(fp, 200)})
             if parts == ["api", "usage"]:
                 snap = WATCH.snapshot()
                 return self.send(200, {"plan": snap["plan"], "tokens": snap["tokens"], "best": snap["best"]})
@@ -493,6 +502,12 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"ok": True, "already": True})
                     launch(p, action, b.get("workdir"))
                     return self.send(200, {"ok": True})
+                if action == "resume" and b.get("sid"):
+                    # A session known by its Claude Code id (e.g. a Workspace pane).
+                    if not monitor.SESSION_ID.match(b["sid"]):
+                        return self.send(400, {"error": "Bad session id"})
+                    launch(p, "cli", b.get("cwd"), ["--resume", b["sid"]])
+                    return self.send(200, {"ok": True})
                 if action == "resume":
                     fp, fs = WATCH.index.find(p["id"], b.get("session_id", ""))
                     if not fp:
@@ -524,7 +539,8 @@ class Handler(BaseHTTPRequestHandler):
                 if cfg:
                     Path(cfg).mkdir(parents=True, exist_ok=True)
                 r = WATCH.runner.start(p["id"], p["name"], resolve_cli(), cfg, b.get("cwd") or p.get("workdir"),
-                                       b.get("prompt", ""), b.get("mode", "plan"))
+                                       b.get("prompt", ""), b.get("mode", "plan"), b.get("resume") or None,
+                                       b.get("source", "task"))
                 touch(p)
                 return self.send(200, r)
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "stop":

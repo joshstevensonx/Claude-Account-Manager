@@ -182,6 +182,23 @@ body.down .offline{display:block}
 .modes small{display:block;color:var(--muted);font-size:10.5px}
 .runview{min-height:420px;display:flex;flex-direction:column}
 .runview .feed{display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow:auto;padding-right:4px}
+/* workspace */
+body.wide .wrap{max-width:none}
+.ws-bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.panes{display:grid;grid-template-columns:repeat(var(--cols,auto-fill),minmax(min(420px,100%),1fr));gap:14px}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;height:min(72vh,760px);min-width:0;overflow:hidden}
+.pane.busy{border-color:color-mix(in srgb,var(--info) 45%,var(--line))}
+.pane .ph{display:flex;gap:9px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);border-top:3px solid var(--c)}
+.pane .ph .grow{flex:1;min-width:0}
+.pane .ph .t1{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane .ph .t2{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane .feed{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+.pane .composer{border-top:1px solid var(--line);padding:9px;display:flex;flex-direction:column;gap:7px}
+.pane textarea{width:100%;min-height:44px;max-height:180px;resize:vertical;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font:inherit;outline:none}
+.pane textarea:focus{border-color:var(--accent)}
+.pane .crow{display:flex;gap:7px;align-items:center}
+.pane select{width:auto;padding:5px 8px;font-size:12px}
+.pane.max{position:fixed;inset:12px;height:auto;z-index:14}
 /* modal */
 .scrim{position:fixed;inset:0;background:rgba(20,18,15,.42);display:none;align-items:center;justify-content:center;z-index:20;padding:16px;backdrop-filter:blur(2px)}
 .scrim.open{display:flex}
@@ -236,6 +253,7 @@ input[type=text]:focus,select:focus{border-color:var(--accent)}
     <button data-tab="accounts" class="on">Accounts</button>
     <button data-tab="sessions">Sessions <span class="count" id="cSessions">0</span></button>
     <button data-tab="usage">Usage</button>
+    <button data-tab="workspace">Workspace <span class="count" id="cPanes">0</span></button>
     <button data-tab="tasks">Tasks <span class="count" id="cTasks">0</span></button>
   </nav>
 
@@ -295,6 +313,17 @@ input[type=text]:focus,select:focus{border-color:var(--accent)}
       <div class="legend" id="chartLegend"></div>
     </div>
     <p class="sub" style="margin-top:12px">Plan limits come from the Claude desktop app's own accounting (<code>plan-usage-history.json</code> in each account's desktop folder) and refresh about every 5 minutes while that account's desktop app is open. Token counts come from Claude Code transcripts; dollar figures are what the same tokens would cost at API list prices — a way to compare accounts, not a bill.</p>
+  </section>
+
+  <!-- WORKSPACE -->
+  <section class="view" id="v-workspace">
+    <div class="ws-bar">
+      <button class="btn primary" id="wsNew">＋ New session</button>
+      <span class="sub" style="flex:1">Several Claude Code sessions side by side, each on any account. Type a message in a pane to send it. Open existing ones from <b>Sessions</b> or <b>Tasks</b>.</span>
+      <div class="seg hide-sm" id="wsCols"><button data-c="" class="on">Auto</button><button data-c="1">1</button><button data-c="2">2</button><button data-c="3">3</button><button data-c="4">4</button></div>
+    </div>
+    <div class="panes" id="panes"></div>
+    <p class="sub" style="margin-top:12px">Each message runs <code>claude -p --resume</code> under the pane's account, so panes work in parallel and keep their history. <b>Plan</b> is read-only; <b>Ask</b> refuses tools that need approval (continue in Terminal for those); <b>Edit</b> may change files. Don't reply to a session that is also open in a Terminal — the two would branch apart.</p>
   </section>
 
   <!-- TASKS -->
@@ -386,6 +415,24 @@ input[type=text]:focus,select:focus{border-color:var(--accent)}
   </form>
 </div>
 
+<!-- new workspace session -->
+<div class="scrim" id="wsScrim">
+  <form class="modal" id="wsForm" autocomplete="off">
+    <h2>New session</h2>
+    <p class="hint">Opens an empty pane. Your first message starts the session.</p>
+    <label for="wAcct">Account</label>
+    <select id="wAcct"></select>
+    <label for="wDir">Project folder</label>
+    <input type="text" id="wDir" list="projList" placeholder="~/Desktop/DEV/project">
+    <label for="wMode">Permissions</label>
+    <select id="wMode"><option value="plan">Plan — read-only</option><option value="default">Ask — tools needing approval are refused</option><option value="acceptEdits">Edit — may change files</option></select>
+    <div class="actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn primary">Open pane</button>
+    </div>
+  </form>
+</div>
+
 <!-- confirm -->
 <div class="scrim" id="confScrim">
   <div class="modal">
@@ -412,7 +459,7 @@ const ICONS = {
 const LABEL = {desktop:"Desktop", cli:"Terminal", browser:"Browser"};
 const SLABEL = {working:"Working", needs_you:"Your turn", waiting:"Needs approval?", idle:"Idle",
   running:"Running", done:"Done", error:"Failed", stopped:"Stopped", interrupted:"Interrupted", starting:"Starting"};
-let S = {profiles:[], settings:{}}, SESS = [], USAGE = null, RUNS = [], NOTES = [], seenNotes = 0;
+let S = {profiles:[], settings:{}}, SESS = [], USAGE = null, RUNS = [], ALLRUNS = [], NOTES = [], seenNotes = 0;
 let tab = "accounts", editing = null, pickColor = COLORS[1], openMenu = null, sFilter = "active", drawerSid = null, runSel = null, chartMode = "tokens", tMode = "plan";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -441,7 +488,7 @@ function badge(id){ const p=prof(id); return `<span class="acc-badge" style="--c
 async function refresh(){
   try {
     const [st, se, ru, no] = await Promise.all([api("/api/state"), api("/api/sessions"), api("/api/runs"), api("/api/notifications")]);
-    S = st; SESS = se.sessions; RUNS = ru.runs; NOTES = no.items;
+    S = st; SESS = se.sessions; ALLRUNS = ru.runs; RUNS = ALLRUNS.filter(r => r.source !== "chat"); NOTES = no.items;
     document.body.classList.remove("down");
     if(tab === "usage" || !USAGE) USAGE = await api("/api/usage");
     renderAll();
@@ -458,6 +505,8 @@ function renderAll(){
   if(tab==="sessions") renderSessions();
   if(tab==="usage") renderUsage();
   if(tab==="tasks") renderTasks();
+  $("#cPanes").textContent = PANES.length; $("#cPanes").classList.toggle("hot", PANES.some(p => paneBusy(p)));
+  if(tab==="workspace") renderPanes();
   if(drawerSid) loadDrawer(false);
 }
 function sorted(){
@@ -469,6 +518,7 @@ function setTab(t){
   tab = t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
   document.querySelectorAll("section.view").forEach(v=>v.classList.toggle("on", v.id==="v-"+t));
+  document.body.classList.toggle("wide", t==="workspace");
   try{ localStorage.setItem("cam.tab", t); }catch(_){}
   if(t==="usage") api("/api/usage").then(u=>{USAGE=u; renderUsage();}).catch(()=>{});
   renderAll();
@@ -528,6 +578,7 @@ function renderAccounts(){
       <div class="menu" id="menu-${p.id}">
         <button data-edit="${p.id}">✎ Edit name, colour, folder</button>
         <button data-pin="${p.id}">${p.pinned?"☆ Unpin":"★ Pin to top"}</button>
+        <button data-newpane="${p.id}">⊞ New session in Workspace</button>
         <button data-newtask="${p.id}">▶ Run a task with this account</button>
         <hr>
         <button data-reveal="cli" data-id="${p.id}">📁 Show Claude Code folder</button>
@@ -585,7 +636,8 @@ async function loadDrawer(scroll){
   let d; try{ d = await api(`/api/sessions/${pid}/${sid}`); }catch(e){ $("#dFeed").innerHTML = `<div class="msg error">${esc(e.message)}</div>`; return; }
   $("#dTitle").textContent = d.title || s.title || "Session";
   $("#dMeta").innerHTML = `${badge(pid)} · ${esc(s.project||"")} ${s.status?pill(s.status):""}`;
-  $("#dActs").innerHTML = `<button class="btn sm primary" data-resume="${esc(pid)}/${esc(sid)}">Resume in Terminal</button>
+  $("#dActs").innerHTML = `<button class="btn sm primary" data-topane="${esc(pid)}/${esc(sid)}">Open in Workspace</button>
+    <button class="btn sm" data-resume="${esc(pid)}/${esc(sid)}">Resume in Terminal</button>
     <button class="btn sm" data-copyresume="${esc(pid)}/${esc(sid)}">Copy resume command</button>
     <span class="sub" style="align-self:center;margin-left:auto">${esc(d.cwd||"")}</span>`;
   const feed = $("#dFeed"), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
@@ -686,6 +738,7 @@ async function loadRun(scroll){
       <h3 style="margin:4px 0 0;font-size:15px">${esc(r.prompt)}</h3></div>${pill(r.status)}</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       ${live?`<button class="btn sm" data-runstop="${r.id}">■ Stop</button>`:""}
+      <button class="btn sm" data-runpane="${r.id}" ${r.session_id&&!live?"":"disabled"}>Open in Workspace</button>
       <button class="btn sm" data-runterm="${r.id}" ${r.session_id?"":"disabled"}>Continue in Terminal</button>
       <button class="btn sm" data-rerun="${r.id}">↻ Run again</button>
       <span class="sub" style="margin-left:auto;align-self:center">${r.ended?`took ${dur(r.ended-r.started)}`:`running ${dur(Date.now()/1000-r.started)}`}${r.turns?` · ${r.turns} turns`:""}${r.cost!=null?` · ${money(r.cost)}`:""}</span>
@@ -699,10 +752,130 @@ $("#taskForm").onsubmit = async e => {
   try{
     const r = await api("/api/runs", {profile:$("#tAcct").value, cwd:$("#tDir").value, prompt:$("#tPrompt").value, mode:tMode});
     $("#tPrompt").value = ""; runSel = r.id; toast(`Task started on ${prof(r.profile).name}`);
-    RUNS = (await api("/api/runs")).runs; renderTasks(); loadRun(true);
+    ALLRUNS = (await api("/api/runs")).runs; RUNS = ALLRUNS.filter(x => x.source !== "chat"); renderTasks(); loadRun(true);
   }catch(err){ toast("⚠ " + err.message); }
 };
 $("#tPrompt").addEventListener("keydown", e => { if(e.key==="Enter" && (e.metaKey||e.ctrlKey)) $("#taskForm").requestSubmit(); });
+
+// ------------------------------------------------------------------ workspace
+// A pane = one Claude Code conversation driven from here. The pane list is kept in this
+// browser only; the sessions live in the account's transcripts, so closing a pane loses nothing.
+let PANES = [], wsCols = "";
+const RUNCACHE = {};
+try{ PANES = JSON.parse(localStorage.getItem("cam.panes")||"[]"); wsCols = localStorage.getItem("cam.wscols")||""; }catch(_){}
+function savePanes(){ try{ localStorage.setItem("cam.panes", JSON.stringify(PANES)); }catch(_){} }
+function lastRun(p){ const id = p.runs[p.runs.length-1]; return id && (RUNCACHE[id] || ALLRUNS.find(r=>r.id===id)); }
+function paneBusy(p){ const r = lastRun(p); return !!r && (r.status==="running" || r.status==="starting"); }
+function addPane(o){
+  if(o.sid){ const ex = PANES.find(p => p.profile===o.profile && p.sid===o.sid); if(ex){ setTab("workspace"); focusPane(ex.id); return; } }
+  const p = {id: Math.random().toString(36).slice(2,10), profile:o.profile, cwd:o.cwd||prof(o.profile).workdir||"~",
+    mode:o.mode||"plan", sid:o.sid||null, title:o.title||"", runs:o.runs||[]};
+  PANES.push(p); savePanes(); setTab("workspace"); focusPane(p.id);
+}
+function focusPane(id){ setTimeout(()=>{ const el = document.querySelector(`[data-pane="${id}"]`); if(el){ el.scrollIntoView({block:"nearest", behavior:"smooth"}); el.querySelector("textarea").focus(); } }, 60); }
+function closePane(id){ PANES = PANES.filter(p => p.id!==id); savePanes(); renderAll(); }
+function openWsNew(pid){
+  $("#wAcct").innerHTML = sorted().map(p=>`<option value="${esc(p.id)}">${esc(p.name)}${S.best?.profile===p.id?" — most headroom":""}</option>`).join("");
+  $("#wAcct").value = pid || S.best?.profile || sorted()[0]?.id || "";
+  $("#wDir").value = prof($("#wAcct").value).workdir || "";
+  $("#wsScrim").classList.add("open"); setTimeout(()=>$("#wDir").focus(), 30);
+  if(!projLoaded){ projLoaded = true; api("/api/projects").then(pj => { $("#projList").innerHTML = pj.projects.map(x=>`<option value="${esc(x)}">`).join(""); }).catch(()=>{}); }
+}
+$("#wsNew").onclick = () => openWsNew();
+$("#wAcct").onchange = () => { $("#wDir").value = prof($("#wAcct").value).workdir || ""; };
+$("#wsForm").onsubmit = e => { e.preventDefault(); closeModals(); addPane({profile:$("#wAcct").value, cwd:$("#wDir").value.trim(), mode:$("#wMode").value}); };
+document.querySelectorAll("#wsCols button").forEach(b => b.onclick = () => { wsCols = b.dataset.c; try{ localStorage.setItem("cam.wscols", wsCols); }catch(_){} renderPanes(); });
+
+function renderPanes(){
+  document.querySelectorAll("#wsCols button").forEach(b => b.classList.toggle("on", b.dataset.c===wsCols));
+  const box = $("#panes");
+  box.style.setProperty("--cols", wsCols || "auto-fill");
+  if(!PANES.length){ box.innerHTML = `<div class="empty" style="grid-column:1/-1">No sessions open. Click <b>＋ New session</b>, or open one from <b>Sessions</b> or <b>Tasks</b>.</div>`; return; }
+  box.querySelector(".empty")?.remove();
+  const keep = new Set(PANES.map(p=>p.id));
+  box.querySelectorAll(".pane").forEach(el => { if(!keep.has(el.dataset.pane)) el.remove(); });
+  PANES.forEach(p => {
+    let el = box.querySelector(`[data-pane="${p.id}"]`);
+    if(!el){
+      el = document.createElement("article"); el.className = "pane"; el.dataset.pane = p.id;
+      el.innerHTML = `<div class="ph"><div class="avatar sm"></div><div class="grow"><div class="t1"></div><div class="t2"></div></div><span class="pst"></span>
+          <button class="btn ghost sm" data-pmax title="Enlarge (Esc to restore)">⤢</button><button class="btn ghost sm" data-pclose title="Close pane (the session is kept)">✕</button></div>
+        <div class="feed"></div>
+        <form class="composer"><textarea placeholder="Message Claude…  (⌘↩ to send)"></textarea>
+          <div class="crow"><select data-pmode title="Permissions"><option value="plan">Plan</option><option value="default">Ask</option><option value="acceptEdits">Edit</option></select>
+          <button type="button" class="btn sm" data-pstop>■ Stop</button><button type="button" class="btn sm" data-pterm title="Continue this session in Terminal">Terminal</button>
+          <span class="spacer"></span><button class="btn sm primary" type="submit">Send</button></div></form>`;
+      el.querySelector("[data-pclose]").onclick = () => closePane(p.id);
+      el.querySelector("[data-pmax]").onclick = () => el.classList.toggle("max");
+      el.querySelector("[data-pmode]").onchange = ev => { p.mode = ev.target.value; savePanes(); };
+      el.querySelector("[data-pstop]").onclick = async () => { const r = lastRun(p); if(r){ try{ await api(`/api/runs/${r.id}/stop`, {}); toast("Stopping…"); }catch(err){ toast("⚠ "+err.message); } } };
+      el.querySelector("[data-pterm]").onclick = async () => { if(!p.sid) return toast("Send a message first");
+        try{ await api(`/api/profiles/${p.profile}/resume`, {sid:p.sid, cwd:p.cwd}); toast(`Continuing in Terminal · ${prof(p.profile).name}`); }catch(err){ toast("⚠ "+err.message); } };
+      const ta = el.querySelector("textarea");
+      ta.addEventListener("keydown", ev => { if(ev.key==="Enter" && (ev.metaKey||ev.ctrlKey)){ ev.preventDefault(); el.querySelector("form").requestSubmit(); } });
+      el.querySelector("form").onsubmit = ev => { ev.preventDefault(); sendPane(p, ta); };
+      box.appendChild(el);
+      loadPane(p, true);
+    }
+    paneHeader(p, el);
+  });
+  PANES.forEach(p => { if(!paneBusy(p)) loadPane(p); });
+}
+function paneHeader(p, el){
+  const pr = prof(p.profile), r = lastRun(p), busy = paneBusy(p);
+  const s = p.sid && SESS.find(x => x.profile===p.profile && x.id===p.sid);
+  el.style.setProperty("--c", pr.color);
+  el.classList.toggle("busy", busy);
+  el.querySelector(".avatar").textContent = initials(pr.name);
+  el.querySelector(".avatar").style.background = pr.color;
+  el.querySelector(".t1").textContent = (s && s.title) || p.title || "New session";
+  el.querySelector(".t2").textContent = `${pr.name} · ${p.cwd || "~"}`;
+  el.querySelector(".pst").innerHTML = busy ? pill("working") : r && ["error","stopped","interrupted"].includes(r.status) ? pill(r.status) : p.sid ? pill("needs_you") : "";
+  el.querySelector("[data-pmode]").value = p.mode;
+  el.querySelector("[data-pstop]").style.display = busy ? "" : "none";
+  el.querySelector("[type=submit]").disabled = busy;
+}
+async function loadPane(p, scroll){
+  const el = document.querySelector(`[data-pane="${p.id}"]`); if(!el) return;
+  try{
+    const id = p.runs[p.runs.length-1];
+    if(id){ const r = await api(`/api/runs/${id}`); RUNCACHE[id] = r;
+      if(r.session_id && r.session_id !== p.sid && r.status!=="running"){ p.sid = r.session_id; savePanes(); } }
+    const tr = p.sid ? await api(`/api/transcript?profile=${encodeURIComponent(p.profile)}&sid=${encodeURIComponent(p.sid)}`) : {found:false};
+    const r = lastRun(p);
+    let html = "";
+    if(tr.found && tr.messages.length){
+      html = feedHtml(tr.messages);
+      const live = r && (r.status==="running" || r.status==="starting");
+      // Errors (e.g. not signed in) never reach the transcript; show the latest run's.
+      if(r && !live) html += feedHtml((r.events||[]).filter(e => e.kind==="error"));
+      if(live && !tr.messages.some(m => m.kind==="user" && m.t && m.t >= r.started - 5))
+        html += feedHtml([{kind:"user", text:r.prompt}]) + `<div class="muted">Working…</div>`;
+    } else {
+      // No transcript yet (first message, or dry-run): show what the runs streamed.
+      for(const rid of p.runs.slice(-10)){
+        const x = (RUNCACHE[rid] && RUNCACHE[rid].events) ? RUNCACHE[rid] : (RUNCACHE[rid] = await api(`/api/runs/${rid}`).catch(()=>null));
+        if(x) html += feedHtml([{kind:"user", text:x.prompt, t:x.started}].concat(x.events||[]));
+      }
+    }
+    const f = el.querySelector(".feed"), atBottom = f.scrollHeight - f.scrollTop - f.clientHeight < 60;
+    if(f._html !== html){
+      f._html = html;
+      f.innerHTML = html || `<div class="muted" style="margin:auto;text-align:center">Ask Claude anything about <b>${esc(p.cwd || "~")}</b>.</div>`;
+      if(scroll || atBottom) f.scrollTop = f.scrollHeight;
+    }
+    paneHeader(p, el);
+  }catch(err){ /* manager offline: the banner already says so */ }
+}
+async function sendPane(p, ta){
+  const text = ta.value.trim(); if(!text || paneBusy(p)) return;
+  try{
+    const r = await api("/api/runs", {profile:p.profile, cwd:p.cwd, prompt:text, mode:p.mode, resume:p.sid||undefined, source:"chat"});
+    ta.value = ""; RUNCACHE[r.id] = r; p.runs.push(r.id); p.runs = p.runs.slice(-30);
+    if(!p.title) p.title = text.slice(0,80);
+    savePanes(); paneHeader(p, document.querySelector(`[data-pane="${p.id}"]`)); loadPane(p, true);
+  }catch(err){ toast("⚠ " + err.message); }
+}
 
 // ------------------------------------------------------------------ notifications
 function renderBell(){
@@ -715,7 +888,7 @@ $("#bellBtn").onclick = e => { e.stopPropagation(); $("#notes").classList.toggle
 // ------------------------------------------------------------------ clicks
 document.addEventListener("click", async e => {
   if(!e.target.closest(".bell")) $("#notes").classList.remove("open");
-  const t = e.target.closest("[data-stop],[data-act],[data-menu],[data-edit],[data-pin],[data-reveal],[data-copycmd],[data-remove],[data-copy],[data-close],[data-sfilter],[data-session],[data-close-drawer],[data-resume],[data-copyresume],[data-run],[data-runstop],[data-runterm],[data-rerun],[data-newtask],[data-goto-sessions]");
+  const t = e.target.closest("[data-stop],[data-act],[data-menu],[data-edit],[data-pin],[data-reveal],[data-copycmd],[data-remove],[data-copy],[data-close],[data-sfilter],[data-session],[data-close-drawer],[data-resume],[data-copyresume],[data-run],[data-runstop],[data-runterm],[data-rerun],[data-newtask],[data-goto-sessions],[data-topane],[data-runpane],[data-newpane]");
   if(!t){ closeMenus(); return; }
   const id = t.dataset.id;
   try{
@@ -748,6 +921,13 @@ document.addEventListener("click", async e => {
     if(t.dataset.runterm){ await api(`/api/runs/${t.dataset.runterm}/terminal`, {}); return toast("Continuing in Terminal"); }
     if(t.dataset.rerun){ const r = RUNS.find(x=>x.id===t.dataset.rerun); $("#tAcct").value=r.profile; $("#tDir").value=r.cwd; $("#tPrompt").value=r.prompt;
       tMode=r.mode; document.querySelectorAll("#tModes button").forEach(x=>x.classList.toggle("on",x.dataset.m===r.mode)); $("#tPrompt").focus(); return; }
+    if(t.dataset.topane){ const [pid,key]=t.dataset.topane.split("/"); const s=SESS.find(x=>x.profile===pid&&x.key===key);
+      if(!s) return toast("Session not found");
+      if(s.status!=="idle") toast("This session looks open elsewhere — replying here would branch it");
+      closeDrawer(); addPane({profile:pid, cwd:s.cwd, sid:s.id, title:s.title}); return; }
+    if(t.dataset.runpane){ const r=ALLRUNS.find(x=>x.id===t.dataset.runpane);
+      addPane({profile:r.profile, cwd:r.cwd, sid:r.session_id, mode:r.mode, title:r.prompt, runs:[r.id]}); return; }
+    if(t.dataset.newpane){ openWsNew(t.dataset.newpane); return; }
     if(t.dataset.newtask){ const p=prof(t.dataset.newtask); setTab("tasks"); $("#tAcct").value=p.id; $("#tDir").value=p.workdir||""; $("#tPrompt").focus(); return; }
   }catch(err){ toast("⚠ " + err.message); }
 });
@@ -819,11 +999,11 @@ $("#allBtn").onclick = async () => {
 $("#q").addEventListener("input", renderAccounts);
 document.addEventListener("keydown", async e => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
-  if(e.key === "Escape"){ closeModals(); closeMenus(); closeDrawer(); $("#notes").classList.remove("open"); if(typing) document.activeElement.blur(); return; }
+  if(e.key === "Escape"){ document.querySelectorAll(".pane.max").forEach(x=>x.classList.remove("max")); closeModals(); closeMenus(); closeDrawer(); $("#notes").classList.remove("open"); if(typing) document.activeElement.blur(); return; }
   if(typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if(e.key === "/"){ e.preventDefault(); (tab==="sessions" ? $("#sq") : $("#q")).focus(); if(tab!=="sessions") setTab("accounts"); return; }
   if(e.key === "n"){ e.preventDefault(); openEdit(null); return; }
-  const tk = {a:"accounts", s:"sessions", u:"usage", t:"tasks"}[e.key]; if(tk){ setTab(tk); return; }
+  const tk = {a:"accounts", s:"sessions", u:"usage", w:"workspace", t:"tasks"}[e.key]; if(tk){ setTab(tk); return; }
   const dm = /^Digit([1-9])$/.exec(e.code);
   if(dm){
     const p = sorted()[+dm[1] - 1]; if(!p) return;
@@ -836,6 +1016,7 @@ try{ seenNotes = +localStorage.getItem("cam.seen") || 0; const t = localStorage.
 setTab(tab);
 refresh();
 setInterval(() => { if(!document.hidden && !openMenu) refresh(); }, 3000);
+setInterval(() => { if(!document.hidden && tab==="workspace") PANES.filter(paneBusy).forEach(p => loadPane(p)); }, 1200);
 </script>
 </body>
 </html>

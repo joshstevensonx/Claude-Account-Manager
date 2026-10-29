@@ -35,6 +35,16 @@ Click a session to read its transcript live. You can **resume it in Terminal** u
 - **Claude Code tokens.** Totals for the last 5 hours, today, 7 days and 30 days, from the transcripts. The dollar figure is what those tokens would cost at API list prices. It's useful for comparing accounts, but it isn't your bill.
 - An account only has limit readings once its **desktop app** has been opened at least once.
 
+## Workspace (several sessions side by side)
+
+Open as many Claude Code sessions as you like in one window, each on any account, and talk to them right in the dashboard — no Terminal needed. Click **＋ New session**, pick an account and a project folder, and type. You can also open an existing conversation from **Sessions** (drawer → *Open in Workspace*), a finished task, or an account's ••• menu.
+
+- Each pane runs independently, so several can be working at once. A notification tells you when a reply is ready.
+- Every message runs `claude -p --resume` under that pane's account, so history carries over. **Terminal** continues the same session interactively.
+- Permissions per pane: **Plan** (read-only), **Ask** (tools needing approval are refused), **Edit** (may change files).
+- **⤢** enlarges a pane (Esc restores). **✕** only closes the pane — the session stays in Sessions.
+- Don't reply from a pane to a session that is also open in a Terminal; the two would branch apart.
+
 ## Tasks (background runs)
 
 Pick an account, a folder and a prompt, and Claude Code runs headless (`claude -p`). The output streams into the dashboard, and **Continue in Terminal** picks up the same conversation interactively. Permission choices:
@@ -47,7 +57,7 @@ Pick an account, a folder and a prompt, and Claude Code runs headless (`claude -
 
 You get a macOS notification when a session or task finishes, when a session seems stuck on an approval, and when an account passes 80% or 95% of a limit. You can switch these off or change the thresholds in Settings. Recent alerts also appear under the bell icon.
 
-Keyboard: `a` / `s` / `u` / `t` switch tabs.
+Keyboard: `a` / `s` / `u` / `w` / `t` switch tabs.
 
 ## Where data lives
 

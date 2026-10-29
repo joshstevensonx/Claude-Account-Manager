@@ -4,11 +4,11 @@
 
 | File | Type | Location on owner's Mac | SHA-256 (first 12) | Transfer? |
 |---|---|---|---|---|
-| `manager.py` | Python 3 | `~/Desktop/DEV/claude_system/manager.py` | f47ba84bc777 | Included |
-| `monitor.py` | Python 3 | `~/Desktop/DEV/claude_system/monitor.py` | af159c22d69a | Included |
-| `index.html` | HTML/CSS/JS | `~/Desktop/DEV/claude_system/index.html` | c7020369cd2d | Included |
+| `manager.py` | Python 3 | `~/Desktop/DEV/claude_system/manager.py` | 3f485db9ac34 | Included |
+| `monitor.py` | Python 3 | `~/Desktop/DEV/claude_system/monitor.py` | 7a545a4a73bf | Included |
+| `index.html` | HTML/CSS/JS | `~/Desktop/DEV/claude_system/index.html` | d48e29a24720 | Included |
 | `Claude Manager.command` | bash, executable | `~/Desktop/DEV/claude_system/Claude Manager.command` | 5cb3c055a897 | Included (run `chmod +x` again after copying) |
-| `README.md` | Markdown user guide | `~/Desktop/DEV/claude_system/README.md` | 8bccdf80c2a8 | Included |
+| `README.md` | Markdown user guide | `~/Desktop/DEV/claude_system/README.md` | 6e606461433a | Included |
 
 The `claude_system` folder held nothing before this project, so the five files above are its only contents.
 

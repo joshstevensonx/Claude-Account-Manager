@@ -16,6 +16,9 @@
 | D-10 | Session status is worked out from transcripts and processes (heuristic), with the label "Needs approval?" including a question mark | There is no official status API for interactive sessions | Hooks-based status | Yes; hooks are a possible upgrade (see the plan) |
 | D-11 | Never start a second desktop or browser copy on the same data folder | Avoids corrupted profile data | Allow it | Yes |
 | D-12 | Session key = sha1(path)[:12] | The same session ID was seen in two project folders (a `claude -p` run re-used its parent session's ID) | Using the session ID as the key | Yes |
+| D-14 | "Multiple sessions in the GUI" = a Workspace tab of chat panes; each message is a headless `claude -p --resume <sid>` run | Owner asked to open multiple sessions in the GUI. Reuses the tested Runner, needs no PTY or extra libraries, and every pane is a normal Claude Code session that can still be continued in Terminal | Embedding real terminals (needs a PTY bridge and xterm.js, against the no-library rule); `--input-format stream-json` long-lived processes (more fragile) | Yes |
+| D-15 | Runs drop inherited `CLAUDECODE` / `CLAUDE_CODE_SESSION_ID` (and similar) env vars | Found in testing: when the manager is started from inside Claude Code, every run reused that session's id, so panes would share one conversation | – | Yes |
+| D-16 | The list of open panes is stored in the browser (`localStorage`), not on the server | It's a view preference; the conversations themselves are the transcripts, so losing the list loses nothing | `~/.claude-system/workspace.json` | Yes |
 | D-13 | One alert per metric per window, persisted across restarts | Early testing showed duplicate alerts (80 and 95 at once) and repeats after a restart | – | Yes |
 
 ## Assumptions (not confirmed)
