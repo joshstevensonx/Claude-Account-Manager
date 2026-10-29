@@ -1,6 +1,6 @@
-# Claude Account Manager
+# Claude Hub (Claude Account Manager)
 
-A local dashboard for running several Claude accounts on one Mac at the same time. Each account can run in the desktop app, in Claude Code in a terminal, or on claude.ai in its own browser window.
+A local dashboard for running several Claude accounts on one Mac at the same time. Each account can run Claude Code in a terminal or right inside the dashboard, Claude.ai in its own browser profile, or a separate Claude Desktop copy.
 
 ## Start
 
@@ -10,76 +10,53 @@ The first time, macOS may block it as being from an unidentified developer. If i
 
 You need python3 (comes with the Xcode Command Line Tools). Nothing else to install.
 
-## Use
+## Pages
 
-1. **New account**: enter a name, colour and the folder the terminal should start in.
-2. Click **Desktop**, **Terminal** or **Browser** on its card, then sign in with that account. You only sign in once per account and window type.
-3. Green dots show which windows are running. ✕ quits that account's desktop app or browser window.
+- **Overview**: counts, accounts with quick launch, everything active right now, recent activity, and which account has the most plan headroom.
+- **Accounts**: one card per account. The **Desktop / Terminal / Browser** pills open (or focus) that client; **Launch** opens the account's default client; **Manage** edits name, colour, default folder and default client. Archiving an account moves its folders to `~/.claude-system/archive` and it can be **restored** from the same page.
+- **Sessions**: every Claude Code conversation from the last 14 days, plus open Desktop and browser windows. Status: **Your turn**, **Needs approval?** (a best guess), **Working**, **Idle**. Click one to read it, resume it in Terminal, or continue it in Chat.
+- **GUI Windows**: the Claude.ai and Claude Desktop windows that are open, with **Focus** and **Quit** per window. **Open multiple** opens several accounts at once.
+- **Chat**: several Claude Code sessions side by side in the dashboard, each on any account. Every message runs `claude -p --resume` under that pane's account, so panes work in parallel and keep their history. Permissions per pane: **Plan** (read-only), **Ask** (tools needing approval are refused), **Edit** (may change files). Don't reply from a pane to a session that is also open in a Terminal; the two would branch apart.
+- **Workspaces**: your project folders (with Git branch, read-only). **New session** on a workspace starts in that folder. Missing folders are flagged so you can relink them.
+- **Tasks**: run a one-off prompt headless under any account; continue it in Terminal or Chat.
+- **Usage**: real 5-hour and weekly plan limits (from each account's Claude Desktop `plan-usage-history.json`), burn rate, time to limit, and Claude Code token totals with API-equivalent dollars (for comparison, not a bill).
+- **Activity**: a log of launches, failures, stops and configuration changes. It never stores prompts or chat content. Export or clear it any time; retention is set there or in Settings.
+- **Settings**: appearance, notifications, terminal and browser, confirm-before-quit, privacy, and **Diagnostics** (checks Claude Code, the apps, folder isolation and missing folders).
 
-Keyboard: `1`–`9` opens the desktop app for an account, `⇧` + number opens Claude Code, `/` searches, `n` creates a new account.
+**New session** (top right) asks for an account, where to open it (Terminal, Chat pane, Browser, Desktop) and a folder, and shows exactly what will open before you launch.
 
-## Sessions (live monitoring)
+Keyboard: `⌘K` or `/` search, `n` new session, `o` `a` `s` `g` `c` `w` `t` `u` `l` switch pages, `1`–`9` launch an account's default client (`⇧` + number opens Claude Code), `Esc` closes.
 
-The **Sessions** tab lists every Claude Code conversation from the last 14 days for every account, newest and most urgent first:
+## Signing in
 
-- **Your turn**: Claude finished and is waiting for you.
-- **Needs approval?**: Claude has been on one tool call for a while, which usually means a permission prompt.
-- **Working**: Claude is thinking or running tools.
-- **Idle**: no terminal is open on it.
-
-Click a session to read its transcript live. You can **resume it in Terminal** under the right account, or copy the resume command. Status comes from the transcripts in `<account>/cli/projects/` and from which `claude` processes are running in which folder.
-
-## Usage
-
-- **Plan limits (real numbers).** The Claude desktop app records the account's 5-hour and weekly utilisation in `plan-usage-history.json` inside its data folder, about every 5 minutes while it's open. This is the same source [trackmyusage](https://github.com/frogbark/trackmyusage) reads. The dashboard shows each limit, how fast it's rising, and roughly how long until it's hit. It also marks the account with the **most headroom**, which the task runner picks by default.
-- **Claude Code tokens.** Totals for the last 5 hours, today, 7 days and 30 days, from the transcripts. The dollar figure is what those tokens would cost at API list prices. It's useful for comparing accounts, but it isn't your bill.
-- An account only has limit readings once its **desktop app** has been opened at least once.
-
-## Workspace (several sessions side by side)
-
-Open as many Claude Code sessions as you like in one window, each on any account, and talk to them right in the dashboard — no Terminal needed. Click **＋ New session**, pick an account and a project folder, and type. You can also open an existing conversation from **Sessions** (drawer → *Open in Workspace*), a finished task, or an account's ••• menu.
-
-- Each pane runs independently, so several can be working at once. A notification tells you when a reply is ready.
-- Every message runs `claude -p --resume` under that pane's account, so history carries over. **Terminal** continues the same session interactively.
-- Permissions per pane: **Plan** (read-only), **Ask** (tools needing approval are refused), **Edit** (may change files).
-- **⤢** enlarges a pane (Esc restores). **✕** only closes the pane — the session stays in Sessions.
-- Don't reply from a pane to a session that is also open in a Terminal; the two would branch apart.
-
-## Tasks (background runs)
-
-Pick an account, a folder and a prompt, and Claude Code runs headless (`claude -p`). The output streams into the dashboard, and **Continue in Terminal** picks up the same conversation interactively. Permission choices:
-
-- **Plan**: read-only.
-- **Ask**: anything that would need approval is refused, because there's no one to ask.
-- **Edit**: Claude may change files in that folder.
+Sign in inside each window the first time you open it; Claude Hub never asks for passwords or codes. An account shows **Signed in** once Claude Code is logged in (read from its own config). Desktop and browser sign-ins can't be read from outside those apps, so they stay **Configured** and Desktop windows are marked **identity unverified**.
 
 ## Notifications
 
-You get a macOS notification when a session or task finishes, when a session seems stuck on an approval, and when an account passes 80% or 95% of a limit. You can switch these off or change the thresholds in Settings. Recent alerts also appear under the bell icon.
-
-Keyboard: `a` / `s` / `u` / `w` / `t` switch tabs.
+You get a macOS notification when a session, chat reply or task finishes, when a session seems stuck on an approval, and when an account passes 80% or 95% of a limit. Recent alerts also appear under the bell icon.
 
 ## Where data lives
 
 ```
 ~/.claude-system/
   profiles.json        account list
-  settings.json        terminal / browser choice
-  aliases.zsh          claude-<name> shell commands (source it from ~/.zshrc)
-  profiles/<id>/desktop   Claude desktop app data   (--user-data-dir)
+  settings.json        preferences
+  workspaces.json      project folders
+  activity.jsonl       Activity log (no prompts or chat content)
+  aliases.zsh          optional claude-<name> shell commands (source it from ~/.zshrc yourself)
+  profiles/<id>/desktop   Claude Desktop data   (--user-data-dir)
   profiles/<id>/cli       Claude Code config/login  (CLAUDE_CONFIG_DIR)
-  profiles/<id>/browser   Chrome profile for claude.ai
-  runs.json            background task history
+  profiles/<id>/browser   browser profile for claude.ai
+  runs.json            task and chat run history
   alerts.json          which limit alerts already fired
-  archive/             removed accounts are moved here, never deleted
+  archive/             archived accounts, never deleted
 ```
 
-The **Default** card is your normal Claude install, which this tool leaves as it is.
+The **Default** account is your normal Claude install, which this tool leaves as it is.
 
 ## Notes
 
-- Running separate desktop app copies uses the `--user-data-dir` flag. Claude doesn't officially support it, so an app update could stop it working. If that happens, the Terminal and Browser options still work.
-- **Sign in to a new desktop copy right after opening it.** Every copy registers itself for the `claude://` sign-in link, and the most recently opened copy wins, so a sign-in can land in the wrong window if you open another account in between.
-- The manager won't start a second desktop or browser copy for an account that already has one open. Claude Code can run in as many terminals as you like.
+- Separate Claude Desktop copies use the `--user-data-dir` flag. Claude doesn't officially support it, so it isn't guaranteed and an app update could stop it working. Claude.ai browser profiles and Claude Code are the dependable ways to run accounts side by side.
+- **Sign in to a new Desktop copy right after opening it.** The most recently opened copy receives the `claude://` sign-in link.
+- The manager never starts a second Desktop or browser copy for an account that already has one open — it brings the existing window to the front instead. Quit only signals the processes started with that account's own folder.
 - The server only listens on 127.0.0.1 and requires a per-session token, so other websites can't trigger launches.
-- Settings let you switch to iTerm, or to Brave, Edge or Arc instead of Chrome.

@@ -37,6 +37,9 @@ REGISTRY = HOME / "profiles.json"
 SETTINGS = HOME / "settings.json"
 ALIASES = HOME / "aliases.zsh"
 LOG = HOME / "manager.log"
+WORKSPACES = HOME / "workspaces.json"
+ACTIVITY = HOME / "activity.jsonl"
+ARCHIVE = HOME / "archive"
 DRY_RUN = os.environ.get("CLAUDE_SYSTEM_DRY_RUN") == "1"  # log commands instead of running them
 PORT = int(os.environ.get("CLAUDE_SYSTEM_PORT", "7788"))
 TOKEN = secrets.token_urlsafe(24)
@@ -51,7 +54,12 @@ DEFAULT_SETTINGS = {
     "notify_approval": True,         # a session seems to be waiting for tool approval
     "notify_limits": True,           # an account crossed a plan-usage threshold
     "alert_thresholds": [80, 95],
+    "confirm_stop": True,            # ask before quitting a window from the dashboard
+    "store_activity": True,          # keep the Activity log (launches, stops, config changes; never prompts)
+    "activity_days": 30,             # Activity retention
 }
+MODES = ("cli", "desktop", "browser")
+MODE_LABEL = {"cli": "Claude Code", "desktop": "Claude Desktop", "browser": "Claude.ai"}
 
 COLORS = ["#d97757", "#6a9bcc", "#788c5d", "#b07cc6", "#c9a227", "#4fa3a5", "#c75b7a", "#7f8c9b"]
 
@@ -136,6 +144,79 @@ def write_aliases():
         lines.append("alias claude-%s='CLAUDE_CONFIG_DIR=\"%s\" claude'" % (p["id"], cfg))
     HOME.mkdir(parents=True, exist_ok=True)
     ALIASES.write_text("\n".join(lines) + "\n")
+
+
+# ---------------------------------------------------------------- activity log
+# Launches, stops and configuration changes only. Never prompts, chat content or environment values.
+ALOCK = threading.Lock()
+
+
+def activity(kind, message, severity="info", profile=None, **meta):
+    if not settings().get("store_activity", True):
+        return
+    e = {"t": time.time(), "type": kind, "severity": severity, "message": message, "profile": profile}
+    if meta:
+        e["meta"] = meta
+    with ALOCK:
+        HOME.mkdir(parents=True, exist_ok=True)
+        with open(ACTIVITY, "a") as f:
+            f.write(json.dumps(e) + "\n")
+
+
+def read_activity(limit=500):
+    cutoff = time.time() - int(settings().get("activity_days", 30)) * 86400
+    out = []
+    with ALOCK:
+        try:
+            with open(ACTIVITY) as f:
+                for line in f:
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    if e.get("t", 0) >= cutoff:
+                        out.append(e)
+        except OSError:
+            pass
+    return out[::-1][:limit]
+
+
+def prune_activity():
+    keep = read_activity(100000)[::-1]
+    with ALOCK:
+        if ACTIVITY.exists():
+            tmp = ACTIVITY.with_suffix(".tmp")
+            tmp.write_text("".join(json.dumps(e) + "\n" for e in keep))
+            os.replace(tmp, ACTIVITY)
+
+
+# ---------------------------------------------------------------- workspaces (project folders)
+def workspaces():
+    return load_json(WORKSPACES, {"workspaces": []})["workspaces"]
+
+
+def ws_info(w):
+    """A workspace plus what can be read from disk (never modified)."""
+    path = os.path.expanduser(w["path"])
+    d = dict(w)
+    d["exists"] = os.path.isdir(path)
+    d["repo"] = os.path.exists(os.path.join(path, ".git"))
+    d["branch"] = None
+    try:
+        head = Path(path, ".git", "HEAD").read_text().strip()
+        d["branch"] = head[16:] if head.startswith("ref: refs/heads/") else head[:8]
+    except OSError:
+        pass
+    return d
+
+
+def clean_path(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        raise ValueError("Choose a folder")
+    full = os.path.abspath(os.path.expanduser(raw))
+    home = str(Path.home())
+    return "~" + full[len(home):] if full == home or full.startswith(home + os.sep) else full
 
 
 # ---------------------------------------------------------------- processes
@@ -242,10 +323,20 @@ def resolve_cli():
 
 
 def run(cmd):
+    """Runs a short launcher command (open / osascript). Raises with its error if it fails."""
     log(("DRY " if DRY_RUN else "RUN ") + " ".join(shlex.quote(c) for c in cmd))
     if DRY_RUN:
         return
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=20,
+                           start_new_session=True)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("%s didn't respond within 20 s" % os.path.basename(cmd[0]))
+    except OSError as e:
+        raise RuntimeError("Couldn't run %s: %s" % (os.path.basename(cmd[0]), e))
+    if r.returncode != 0:
+        msg = (r.stderr or r.stdout or "").strip().splitlines()
+        raise RuntimeError(msg[-1][:300] if msg else "%s failed (exit %d)" % (os.path.basename(cmd[0]), r.returncode))
 
 
 def osa_str(s):
@@ -261,7 +352,7 @@ def touch(p):
         save_json(REGISTRY, data)
 
 
-def launch(p, kind, workdir=None, extra_args=None):
+def launch(p, kind, workdir=None, extra_args=None, label=None, terminal=None):
     s = settings()
     pa = paths(p)
     if kind == "desktop":
@@ -281,8 +372,8 @@ def launch(p, kind, workdir=None, extra_args=None):
     elif kind == "cli":
         wd = os.path.expanduser(workdir or p.get("workdir") or "~")
         if not os.path.isdir(wd):
-            wd = str(Path.home())
-        title = "Claude · %s" % p["name"]
+            raise ValueError("Folder not found: %s — choose another folder or relink the workspace" % wd)
+        title = "Claude · %s" % p["name"] + (" · %s" % label if label else "")
         parts = ["cd %s" % shlex.quote(wd)]
         if not p.get("builtin"):
             pa["cli"].mkdir(parents=True, exist_ok=True)
@@ -291,7 +382,7 @@ def launch(p, kind, workdir=None, extra_args=None):
         parts.append("clear")
         parts.append(" ".join([shlex.quote(resolve_cli())] + [shlex.quote(a) for a in (extra_args or [])]))
         shell = " && ".join(parts)
-        if s["terminal"].lower().startswith("iterm"):
+        if (terminal or s["terminal"]).lower().startswith("iterm"):
             script = ('tell application "iTerm"\n activate\n set w to (create window with default profile)\n'
                       ' tell current session of w to write text %s\nend tell') % osa_str(shell)
         else:
@@ -300,6 +391,16 @@ def launch(p, kind, workdir=None, extra_args=None):
     else:
         raise ValueError("unknown kind")
     touch(p)
+
+
+def focus(p, kind):
+    """Brings a running desktop/browser copy of this profile to the front (by its process id)."""
+    procs = classify(ps_lines(), settings())[p["id"]][kind]
+    if not procs:
+        return False
+    run(["osascript", "-e", 'tell application "System Events" to set frontmost of '
+                            '(first process whose unix id is %d) to true' % min(procs)])
+    return True
 
 
 def stop(p, kind):
@@ -336,9 +437,91 @@ def state():
         item["account"] = cli_account(p)
         item["paths"] = {k: (str(v) if v else None) for k, v in pa.items() if k != "cli_json"}
         item["initialised"] = {k: bool(v and Path(v).exists()) for k, v in pa.items() if k != "cli_json"}
+        item["default_mode"] = p.get("default_mode") or "cli"
+        wd = os.path.expanduser(p.get("workdir") or "~")
+        item["workdir_ok"] = os.path.isdir(wd)
+        # Readiness is separate from "running": only Claude Code's own config tells us who is signed in.
+        # Desktop/browser sign-ins can't be read, so accounts that launch those by default stay "configured".
+        item["readiness"] = ("ready" if item["account"]["email"] else
+                             "configured" if p.get("builtin") or item["default_mode"] != "cli" else "sign_in")
+        item["procs"] = procs.get(p["id"], {})
         out.append(item)
     return {"profiles": out, "settings": s, "aliases_file": str(ALIASES), "dry_run": DRY_RUN,
             "indexed": snap["ready"], "best": snap["best"]}
+
+
+def app_path(name):
+    for base in ("/Applications", str(Path.home() / "Applications"), "/System/Applications",
+                 "/System/Applications/Utilities", "/Applications/Utilities"):
+        cand = os.path.join(base, name + ".app")
+        if os.path.isdir(cand):
+            return cand
+    return None
+
+
+def diagnostics():
+    s = settings()
+    checks = []
+
+    def add(cid, label, ok, detail):
+        checks.append({"id": cid, "label": label, "ok": ok, "detail": detail})
+
+    cli = resolve_cli()
+    if os.path.isfile(cli) and os.access(cli, os.X_OK):
+        try:
+            v = subprocess.run([cli, "--version"], capture_output=True, text=True, timeout=8).stdout.strip()
+        except (subprocess.TimeoutExpired, OSError):
+            v = ""
+        add("cli", "Claude Code", True, "%s%s" % (cli, " · " + v if v else " · version check timed out"))
+    else:
+        add("cli", "Claude Code", False, "Not found (%s). Install it from code.claude.com, or set the command in Settings." % cli)
+    for cid, label, name in (("desktop", "Claude Desktop", s["desktop_app"]), ("browser", "Browser", s["browser_app"]),
+                             ("terminal", "Terminal app", "iTerm" if s["terminal"].lower().startswith("iterm") else "Terminal")):
+        found = app_path(name)
+        add(cid, label, bool(found) if sys.platform == "darwin" else None,
+            found or ("%s.app not found in Applications" % name if sys.platform == "darwin" else "Only checked on macOS"))
+    add("osascript", "AppleScript (Terminal launch, notifications, focus)",
+        bool(shutil.which("osascript")) if sys.platform == "darwin" else None,
+        "Available" if shutil.which("osascript") else "osascript not found")
+    # Isolation: no two accounts may share a Claude Code config folder.
+    seen, clash = {}, []
+    for p in registry()["profiles"]:
+        real = os.path.realpath(str(paths(p)["cli"]))
+        if real in seen:
+            clash.append("%s and %s" % (seen[real], p["name"]))
+        seen[real] = p["name"]
+    add("isolation", "Separate Claude Code folders", not clash,
+        "Shared folder: " + "; ".join(clash) if clash else "Every account has its own CLAUDE_CONFIG_DIR")
+    missing = [p["name"] for p in registry()["profiles"] if not os.path.isdir(os.path.expanduser(p.get("workdir") or "~"))]
+    missing += [w["name"] for w in workspaces() if not os.path.isdir(os.path.expanduser(w["path"]))]
+    add("paths", "Folders", not missing, "Missing: " + ", ".join(missing) if missing else "All account and workspace folders exist")
+    add("desktop_isolation", "Desktop account isolation", None,
+        "Unverified: each account opens its own Claude Desktop copy (--user-data-dir), but which account is signed in "
+        "there can't be checked from outside the app.")
+    return checks
+
+
+def archived():
+    out = []
+    if ARCHIVE.is_dir():
+        for d in sorted(ARCHIVE.iterdir(), reverse=True):
+            if d.is_dir():
+                meta = load_json(d / "profile.json", {})
+                out.append({"dir": d.name, "id": meta.get("id") or d.name.rsplit("-", 1)[0],
+                            "name": meta.get("name") or d.name.rsplit("-", 1)[0], "color": meta.get("color"),
+                            "archived": meta.get("archived") or d.stat().st_mtime})
+    return out
+
+
+def pick_folder():
+    """Native macOS folder picker."""
+    if DRY_RUN or not shutil.which("osascript"):
+        raise ValueError("The folder picker needs macOS — type the path instead")
+    r = subprocess.run(["osascript", "-e", 'POSIX path of (choose folder with prompt "Choose a project folder")'],
+                       capture_output=True, text=True, timeout=300)
+    if r.returncode != 0:
+        return None  # cancelled
+    return clean_path(r.stdout.strip())
 
 
 class Watcher:
@@ -461,6 +644,22 @@ class Handler(BaseHTTPRequestHandler):
                 if not fp:
                     return self.send(200, {"found": False, "messages": []})
                 return self.send(200, {"found": True, "messages": monitor.transcript(fp, 200)})
+            if parts == ["api", "workspaces"]:
+                snap = WATCH.snapshot()
+                out = []
+                for w in workspaces():
+                    d = ws_info(w)
+                    full = os.path.expanduser(w["path"])
+                    d["active"] = sum(1 for x in snap["sessions"] if x["status"] != "idle" and x["cwd"] and
+                                      (x["cwd"] == full or x["cwd"].startswith(full + os.sep)))
+                    out.append(d)
+                return self.send(200, {"workspaces": out})
+            if parts == ["api", "activity"]:
+                return self.send(200, {"items": read_activity(int(q.get("limit", 500)))})
+            if parts == ["api", "diagnostics"]:
+                return self.send(200, {"checks": diagnostics()})
+            if parts == ["api", "archive"]:
+                return self.send(200, {"items": archived()})
             if parts == ["api", "usage"]:
                 snap = WATCH.snapshot()
                 return self.send(200, {"plan": snap["plan"], "tokens": snap["tokens"], "best": snap["best"]})
@@ -496,29 +695,52 @@ class Handler(BaseHTTPRequestHandler):
                 if not p:
                     return self.send(404, {"error": "no such profile"})
                 action = parts[3]
-                if action in ("desktop", "cli", "browser"):
-                    # Never start a second desktop/browser copy on the same data folder.
+                if action in MODES:
+                    # Never start a second desktop/browser copy on the same data folder: focus it instead.
                     if action != "cli" and classify(ps_lines(), settings())[p["id"]][action]:
+                        try:
+                            focus(p, action)
+                        except RuntimeError:
+                            pass
                         return self.send(200, {"ok": True, "already": True})
-                    launch(p, action, b.get("workdir"))
+                    wd = b.get("workdir") or None
+                    where = " in %s" % clean_path(wd or p.get("workdir") or "~") if action == "cli" else ""
+                    try:
+                        launch(p, action, wd, label=(b.get("label") or "").strip()[:60] or None,
+                               terminal=b.get("terminal") if b.get("terminal") in ("Terminal", "iTerm") else None)
+                    except (ValueError, RuntimeError) as e:
+                        activity("launch_failed", "%s didn't open%s: %s" % (MODE_LABEL[action], where, e), "error", p["id"])
+                        raise
+                    activity("launch", "Opened %s%s" % (MODE_LABEL[action], where), "info", p["id"],
+                             mode=action, label=b.get("label") or None)
                     return self.send(200, {"ok": True})
+                if action == "focus":
+                    kind = b.get("kind")
+                    if kind not in ("desktop", "browser"):
+                        return self.send(400, {"error": "can only focus desktop or browser windows"})
+                    return self.send(200, {"focused": focus(p, kind)})
                 if action == "resume" and b.get("sid"):
                     # A session known by its Claude Code id (e.g. a Workspace pane).
                     if not monitor.SESSION_ID.match(b["sid"]):
                         return self.send(400, {"error": "Bad session id"})
                     launch(p, "cli", b.get("cwd"), ["--resume", b["sid"]])
+                    activity("launch", "Resumed a Claude Code session in Terminal", "info", p["id"], mode="cli")
                     return self.send(200, {"ok": True})
                 if action == "resume":
                     fp, fs = WATCH.index.find(p["id"], b.get("session_id", ""))
                     if not fp:
                         return self.send(404, {"error": "session not found"})
                     launch(p, "cli", fs.cwd, ["--resume", fs.sid or Path(fp).stem])
+                    activity("launch", "Resumed a Claude Code session in Terminal", "info", p["id"], mode="cli")
                     return self.send(200, {"ok": True})
                 if action == "stop":
                     kind = b.get("kind")
                     if kind not in ("desktop", "browser"):
                         return self.send(400, {"error": "can only stop desktop or browser"})
-                    return self.send(200, {"stopped": stop(p, kind)})
+                    n = stop(p, kind)
+                    if n:
+                        activity("stop", "Quit %s" % MODE_LABEL[kind], "info", p["id"], mode=kind)
+                    return self.send(200, {"stopped": n})
                 if action == "update":
                     return self.send(200, self.update(p, b))
                 if action == "remove":
@@ -542,6 +764,9 @@ class Handler(BaseHTTPRequestHandler):
                                        b.get("prompt", ""), b.get("mode", "plan"), b.get("resume") or None,
                                        b.get("source", "task"))
                 touch(p)
+                if b.get("source") != "chat" or not b.get("resume"):
+                    activity("run", "Started a headless %s in %s (%s mode)" % (
+                        "chat" if b.get("source") == "chat" else "task", r["project"], r["mode"]), "info", p["id"])
                 return self.send(200, r)
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "stop":
                 return self.send(200, {"stopped": WATCH.runner.stop(parts[2])})
@@ -559,20 +784,66 @@ class Handler(BaseHTTPRequestHandler):
                         v = b.get(k)
                         if isinstance(default, bool) and isinstance(v, bool):
                             s[k] = v
+                        elif isinstance(default, int) and not isinstance(default, bool) and str(v).isdigit():
+                            s[k] = max(1, min(int(v), 365))
                         elif isinstance(default, list) and isinstance(v, list):
                             s[k] = [int(x) for x in v if str(x).isdigit() and 0 < int(x) <= 100][:4]
                         elif isinstance(default, str) and isinstance(v, str) and v.strip():
                             s[k] = v.strip()
                     save_json(SETTINGS, s)
+                if "store_activity" in b or "activity_days" in b:
+                    prune_activity()
                 return self.send(200, s)
             if parts == ["api", "launch-all"]:
                 kind = b.get("kind", "desktop")
-                ids = b.get("ids") or []
-                for pid in ids:
+                if kind not in ("desktop", "browser"):
+                    return self.send(400, {"error": "Open several desktop or browser windows at a time"})
+                procs = classify(ps_lines(), settings())
+                opened, failed = [], []
+                for pid in b.get("ids") or []:
                     p = find(pid)
-                    if p:
+                    if not p or procs.get(pid, {}).get(kind):
+                        continue
+                    try:
                         launch(p, kind)
-                        time.sleep(0.4)
+                        opened.append(p["name"])
+                        activity("launch", "Opened %s (batch)" % MODE_LABEL[kind], "info", p["id"], mode=kind)
+                    except (ValueError, RuntimeError) as e:
+                        failed.append(p["name"])
+                        activity("launch_failed", "%s didn't open: %s" % (MODE_LABEL[kind], e), "error", p["id"])
+                    time.sleep(0.4)
+                return self.send(200, {"ok": True, "opened": opened, "failed": failed})
+            if parts == ["api", "pick-folder"]:
+                return self.send(200, {"path": pick_folder()})
+            if parts == ["api", "workspaces"]:
+                return self.send(200, self.ws_save(None, b))
+            if len(parts) == 4 and parts[:2] == ["api", "workspaces"]:
+                if parts[3] == "update":
+                    return self.send(200, self.ws_save(parts[2], b))
+                w = next((x for x in workspaces() if x["id"] == parts[2]), None)
+                if not w:
+                    return self.send(404, {"error": "no such workspace"})
+                if parts[3] == "remove":
+                    with LOCK:
+                        save_json(WORKSPACES, {"workspaces": [x for x in workspaces() if x["id"] != w["id"]]})
+                    activity("workspace", "Removed workspace %s from the list (folder untouched)" % w["name"])
+                    return self.send(200, {"ok": True})
+                if parts[3] == "reveal":
+                    full = os.path.expanduser(w["path"])
+                    if not os.path.isdir(full):
+                        return self.send(400, {"error": "Folder not found: %s" % w["path"]})
+                    run(["open", full])
+                    return self.send(200, {"ok": True})
+            if len(parts) == 4 and parts[:2] == ["api", "archive"] and parts[3] == "restore":
+                return self.send(200, self.restore(parts[2]))
+            if parts == ["api", "activity", "clear"]:
+                with ALOCK:
+                    if ACTIVITY.exists():
+                        ACTIVITY.unlink()
+                return self.send(200, {"ok": True})
+            if parts == ["api", "reveal-home"]:
+                HOME.mkdir(parents=True, exist_ok=True)
+                run(["open", str(HOME)])
                 return self.send(200, {"ok": True})
         except Exception as e:  # surface errors to the UI instead of crashing
             log("ERROR %r" % e)
@@ -595,6 +866,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": pid, "name": name, "note": (b.get("note") or "").strip()[:80],
                 "color": b.get("color") or COLORS[len(data["profiles"]) % len(COLORS)],
                 "workdir": (b.get("workdir") or "~").strip(),
+                "default_mode": b.get("default_mode") if b.get("default_mode") in MODES else "cli",
                 "builtin": False, "created": time.time(), "last_used": None,
             }
             data["profiles"].append(p)
@@ -602,6 +874,7 @@ class Handler(BaseHTTPRequestHandler):
         for d in ("desktop", "cli", "browser"):
             paths(p)[d].mkdir(parents=True, exist_ok=True)
         write_aliases()
+        activity("profile", "Created account %s" % name, "info", pid)
         return p
 
     def update(self, p, b):
@@ -614,8 +887,12 @@ class Handler(BaseHTTPRequestHandler):
                             q[k] = b[k].strip()[:lim] or q[k]
                     if "pinned" in b:
                         q["pinned"] = bool(b["pinned"])
+                    if b.get("default_mode") in MODES:
+                        q["default_mode"] = b["default_mode"]
                     p = q
             save_json(REGISTRY, data)
+        if set(b) - {"pinned"}:
+            activity("profile", "Updated account %s" % p["name"], "info", p["id"])
         return p
 
     def remove(self, p):
@@ -628,17 +905,69 @@ class Handler(BaseHTTPRequestHandler):
             data["profiles"] = [q for q in data["profiles"] if q["id"] != p["id"]]
             save_json(REGISTRY, data)
         src = PROFILES_DIR / p["id"]
-        if src.exists():
-            dest = HOME / "archive" / ("%s-%d" % (p["id"], int(time.time())))
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src), str(dest))
+        src.mkdir(parents=True, exist_ok=True)
+        meta = dict(p)
+        meta["archived"] = time.time()
+        (src / "profile.json").write_text(json.dumps(meta, indent=2))
+        dest = ARCHIVE / ("%s-%d" % (p["id"], int(time.time())))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dest))
         write_aliases()
+        activity("profile", "Archived account %s (data kept in %s)" % (p["name"], dest), "info", p["id"])
         return {"ok": True}
+
+    def restore(self, dirname):
+        src = ARCHIVE / dirname
+        if "/" in dirname or dirname.startswith(".") or not src.is_dir():
+            raise ValueError("Archived account not found")
+        meta = load_json(src / "profile.json", {})
+        with LOCK:
+            data = registry()
+            ids = {p["id"] for p in data["profiles"]}
+            base = meta.get("id") or slug(dirname.rsplit("-", 1)[0])
+            pid, n = base, 2
+            while pid in ids or (PROFILES_DIR / pid).exists():
+                pid, n = "%s-%d" % (base, n), n + 1
+            p = {"id": pid, "name": meta.get("name") or pid, "note": meta.get("note", ""),
+                 "color": meta.get("color") or COLORS[len(data["profiles"]) % len(COLORS)],
+                 "workdir": meta.get("workdir") or "~", "default_mode": meta.get("default_mode") or "cli",
+                 "builtin": False, "created": meta.get("created") or time.time(), "last_used": meta.get("last_used")}
+            PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(PROFILES_DIR / pid))
+            data["profiles"].append(p)
+            save_json(REGISTRY, data)
+        write_aliases()
+        activity("profile", "Restored account %s" % p["name"], "info", pid)
+        return p
+
+    def ws_save(self, wid, b):
+        name = (b.get("name") or "").strip()[:60]
+        path = clean_path(b.get("path"))
+        if not os.path.isdir(os.path.expanduser(path)):
+            raise ValueError("Folder not found: %s" % path)
+        name = name or Path(os.path.expanduser(path)).name or path
+        prof = b.get("profile") if find(b.get("profile") or "") else None
+        with LOCK:
+            items = workspaces()
+            if wid:
+                w = next((x for x in items if x["id"] == wid), None)
+                if not w:
+                    raise ValueError("no such workspace")
+            else:
+                if any(os.path.expanduser(x["path"]) == os.path.expanduser(path) for x in items):
+                    raise ValueError("That folder is already a workspace")
+                w = {"id": secrets.token_hex(4), "created": time.time()}
+                items.append(w)
+            w.update({"name": name, "path": path, "notes": (b.get("notes") or "").strip()[:200], "profile": prof})
+            save_json(WORKSPACES, {"workspaces": items})
+        activity("workspace", "%s workspace %s (%s)" % ("Updated" if wid else "Added", name, path))
+        return w
 
 
 def main():
     registry()
     write_aliases()
+    prune_activity()
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
